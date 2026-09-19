@@ -30,7 +30,7 @@ export async function checkRef(
   capturedHash: string
 ): Promise<RefStaleness> {
   const current = await computeFingerprint(repoRoot, ref);
-
+  // temp drift marker for dogfood test
   if (current.kind === "missing") {
     return {
       ref,
