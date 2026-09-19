@@ -60,13 +60,14 @@ export function extractSymbolBlock(content: string, symbol: string): string | nu
   }
 
   // Brace-delimited: find the first '{' at/after the decl line and match braces.
-  let searchFrom = declLineIdx;
+  // Look far enough ahead to cover multi-line signatures (many params, generics, return
+  // type annotations) before giving up and treating this as a brace-less one-liner.
+  const BRACE_SEARCH_WINDOW = 50;
   let braceLine = -1;
   let braceCol = -1;
-  outer: for (let i = declLineIdx; i < Math.min(lines.length, declLineIdx + 5); i++) {
+  outer: for (let i = declLineIdx; i < Math.min(lines.length, declLineIdx + BRACE_SEARCH_WINDOW); i++) {
     const line = lines[i];
-    const start = i === declLineIdx ? 0 : 0;
-    for (let c = start; c < line.length; c++) {
+    for (let c = 0; c < line.length; c++) {
       if (line[c] === "{") {
         braceLine = i;
         braceCol = c;

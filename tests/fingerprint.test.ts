@@ -65,6 +65,25 @@ describe("extractSymbolBlock", () => {
     expect(block).not.toContain("def after");
   });
 
+  it("extracts a function whose signature spans many lines (opening brace far from the declaration)", () => {
+    const src = [
+      "export async function checkRef(",
+      "  repoRoot: string,",
+      "  ref: string,",
+      "  capturedCommit: string | null,",
+      "  capturedHash: string",
+      "): Promise<string> {",
+      "  return 'original';",
+      "}",
+    ].join("\n");
+    const block = extractSymbolBlock(src, "checkRef");
+    expect(block).toContain("return 'original';");
+
+    const changed = src.replace("return 'original';", "return 'changed';");
+    const changedBlock = extractSymbolBlock(changed, "checkRef");
+    expect(hashContent(block!)).not.toBe(hashContent(changedBlock!));
+  });
+
   it("returns null when the symbol cannot be found", () => {
     expect(extractSymbolBlock("const a = 1;", "doesNotExist")).toBeNull();
   });
