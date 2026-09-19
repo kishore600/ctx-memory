@@ -9,7 +9,7 @@ tags:
 refs:
   - src/core/staleness.ts#checkRef
 supersedes: null
-status: active
+status: superseded
 commit: da746d6bf843c3e6742adf61efaa0c3c50af7c0f
 fingerprint:
   src/core/staleness.ts#checkRef:
