@@ -11,6 +11,10 @@ storage, capture, and local staleness detection. It's built to be interoperable,
 entries are plain markdown with YAML frontmatter, readable by any tool, versioned by git like everything
 else in the repo.
 
+For the full end-to-end picture — every feature, the workflow, architecture and sequence diagrams,
+and a deep-dive on how staleness detection and symbol fingerprinting actually work — see
+[`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
 ## Why
 
 Every team adding a second developer (or a second AI agent) to a codebase hits the same problem:
