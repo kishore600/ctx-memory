@@ -1,0 +1,5 @@
+# Project-scoped MCP config for Codex CLI. Codex only reads this for projects
+# you've marked as trusted (`codex` will prompt, or run `codex trust` on this dir).
+[mcp_servers.ctx-memory]
+command = "npx"
+args = ["tsx", "src/cli.ts", "mcp"]

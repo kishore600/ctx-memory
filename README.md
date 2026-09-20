@@ -142,21 +142,44 @@ Runs over stdio, exposing:
   straight to a git-tracked file for you to review at your next commit, same as anything else the
   agent writes — never committed on your behalf.
 
-To register it with Claude Code, add an entry to your project's `.mcp.json`:
+### Setting it up per agent
+
+This repo already carries working examples of all three — `.mcp.json`, `.cursor/mcp.json`,
+`.codex/config.toml` — pointing at `npx tsx src/cli.ts mcp` (runs from source, no build step).
+Use the same shape in any other project, pointing `args` at wherever `ctx-memory` lives there.
+
+**Claude Code** — project-scope `.mcp.json` at the repo root (commit it so the whole team gets
+it on clone):
 
 ```json
 {
   "mcpServers": {
     "ctx-memory": {
-      "command": "node",
-      "args": ["<path-to-this-repo>/dist/cli.js", "mcp"]
+      "command": "npx",
+      "args": ["tsx", "src/cli.ts", "mcp"]
     }
   }
 }
 ```
 
-Other MCP-compatible tools (Cursor, Codex, Antigravity) follow the same shape — point their MCP
-config at the same command.
+**Cursor** — identical JSON shape, at `.cursor/mcp.json`.
+
+**Codex CLI** — TOML, not JSON, at `.codex/config.toml`, and Codex only reads it for projects
+you've marked trusted (`codex trust` on the repo once):
+
+```toml
+[mcp_servers.ctx-memory]
+command = "npx"
+args = ["tsx", "src/cli.ts", "mcp"]
+```
+
+### Getting an agent to actually use it
+
+Registering the server makes the tools *available* — it doesn't make an agent reach for them.
+Add a short instruction block to `CLAUDE.md`/`AGENTS.md` (above the generated marker section,
+so it survives every `memory generate`) telling the agent when to call what — see the "Working
+with project memory" section at the top of this repo's own `CLAUDE.md` for the exact wording
+to copy. Full rationale in [ARCHITECTURE.md](./ARCHITECTURE.md) §9.
 
 ## Pre-commit hook
 
