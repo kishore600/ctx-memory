@@ -42,12 +42,17 @@ Or run it straight from the repo without linking: `node dist/cli.js <command>`.
 ## Quickstart
 
 ```bash
-memory init                 # creates .memory/ in the current git repo
-memory capture               # one command, interactive prompts for title/body/refs/tags
+memory init                   # creates .memory/ in the current git repo
+memory connect                # wires the MCP server into Claude Code / Cursor / Codex
+memory capture                # one command, interactive prompts for title/body/refs/tags
 memory generate               # writes captured entries into CLAUDE.md and AGENTS.md
 memory check                  # fast-tier staleness check against the working tree
-memory mcp                    # runs the MCP server over stdio
+memory mcp                    # runs the MCP server over stdio (agents call this, not you)
 ```
+
+Adding this to an existing project is `memory init && memory connect` — `connect` merges the
+server into `.mcp.json`, `.cursor/mcp.json`, and `.codex/config.toml` (preserving any servers
+already configured there) and writes the agent usage instructions into `CLAUDE.md`/`AGENTS.md`.
 
 ### Capturing non-interactively (for scripts / agent tool calls)
 
@@ -144,9 +149,21 @@ Runs over stdio, exposing:
 
 ### Setting it up per agent
 
-This repo already carries working examples of all three — `.mcp.json`, `.cursor/mcp.json`,
-`.codex/config.toml` — pointing at `npx tsx src/cli.ts mcp` (runs from source, no build step).
-Use the same shape in any other project, pointing `args` at wherever `ctx-memory` lives there.
+`memory connect` writes all of this for you and is the recommended path:
+
+```bash
+memory connect                        # all three agents
+memory connect --agent claude,cursor  # just some of them
+memory connect --command "memory mcp" # override the spawn command (e.g. if globally linked)
+memory connect --no-instructions      # skip the CLAUDE.md/AGENTS.md usage section
+```
+
+It merges into any config already present rather than replacing it, refuses to touch a config
+file it can't parse, and is idempotent — re-running reports `unchanged`. By default it registers
+the absolute path of the CLI that's running, so it works whether ctx-memory is globally linked,
+cloned from source, or referenced from another repo.
+
+The equivalent by hand, if you'd rather write the files yourself:
 
 **Claude Code** — project-scope `.mcp.json` at the repo root (commit it so the whole team gets
 it on clone):
@@ -176,10 +193,10 @@ args = ["tsx", "src/cli.ts", "mcp"]
 ### Getting an agent to actually use it
 
 Registering the server makes the tools *available* — it doesn't make an agent reach for them.
-Add a short instruction block to `CLAUDE.md`/`AGENTS.md` (above the generated marker section,
-so it survives every `memory generate`) telling the agent when to call what — see the "Working
-with project memory" section at the top of this repo's own `CLAUDE.md` for the exact wording
-to copy. Full rationale in [ARCHITECTURE.md](./ARCHITECTURE.md) §9.
+That takes a written instruction the agent reads at session start, which is why `memory connect`
+also writes a "Working with project memory" block into `CLAUDE.md`/`AGENTS.md`, in its own
+`ctx-memory:usage` markers above the generated memory section so both survive each other.
+Full rationale in [ARCHITECTURE.md](./ARCHITECTURE.md) §9.
 
 ## Pre-commit hook
 

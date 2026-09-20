@@ -20,8 +20,8 @@ export async function runInit(cwd: string): Promise<void> {
   console.log(`✔ Initialized memory store at ${path.join(repoRoot, ".memory")}`);
   console.log("");
   console.log("Next steps:");
+  console.log("  memory connect     wire the MCP server into Claude Code / Cursor / Codex");
   console.log("  memory capture     capture a decision or piece of context");
   console.log("  memory generate    write captured entries into CLAUDE.md / AGENTS.md");
   console.log("  memory check       check captured entries for staleness");
-  console.log("  memory mcp         run the MCP server (register it with your agent)");
 }

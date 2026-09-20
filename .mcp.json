@@ -2,7 +2,11 @@
   "mcpServers": {
     "ctx-memory": {
       "command": "npx",
-      "args": ["tsx", "src/cli.ts", "mcp"]
+      "args": [
+        "tsx",
+        "src/cli.ts",
+        "mcp"
+      ]
     }
   }
 }

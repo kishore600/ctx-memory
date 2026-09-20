@@ -3,3 +3,4 @@ dist/
 *.log
 error-log.json
 .claude/worktrees/
+.claude/.mcp.json

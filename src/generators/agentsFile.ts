@@ -56,7 +56,21 @@ export function renderMemorySection(entries: MemoryEntry[]): string {
   return lines.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
-export async function upsertMemorySection(filePath: string, section: string): Promise<"created" | "updated"> {
+export interface UpsertOptions {
+  startMarker?: string;
+  endMarker?: string;
+  /** When the section is new, insert it above this marker line instead of appending. */
+  insertBefore?: string;
+}
+
+export async function upsertMarkedSection(
+  filePath: string,
+  section: string,
+  options: UpsertOptions = {}
+): Promise<"created" | "updated"> {
+  const startMarker = options.startMarker ?? START_MARKER;
+  const endMarker = options.endMarker ?? END_MARKER;
+
   let existing = "";
   let created = false;
   try {
@@ -76,8 +90,8 @@ export async function upsertMemorySection(filePath: string, section: string): Pr
   // the real closing marker, corrupting the file.
   const lines = existing.split("\n");
   const trimmedLines = lines.map((l) => l.trim());
-  const startLine = trimmedLines.indexOf(START_MARKER);
-  const endLine = trimmedLines.lastIndexOf(END_MARKER);
+  const startLine = trimmedLines.indexOf(startMarker);
+  const endLine = trimmedLines.lastIndexOf(endMarker);
 
   let next: string;
   if (startLine !== -1 && endLine !== -1 && endLine >= startLine) {
@@ -85,12 +99,23 @@ export async function upsertMemorySection(filePath: string, section: string): Pr
     const after = lines.slice(endLine + 1).join("\n");
     next = (before ? before + "\n" : "") + section + (after ? "\n" + after : "\n");
   } else {
-    const sep = existing.endsWith("\n") ? "\n" : "\n\n";
-    next = existing + sep + section + "\n";
+    const anchor = options.insertBefore ? trimmedLines.indexOf(options.insertBefore) : -1;
+    if (anchor !== -1) {
+      const before = lines.slice(0, anchor).join("\n");
+      const after = lines.slice(anchor).join("\n");
+      next = (before ? before + "\n" : "") + section + "\n\n" + after;
+    } else {
+      const sep = existing.endsWith("\n") ? "\n" : "\n\n";
+      next = existing + sep + section + "\n";
+    }
   }
 
   await writeFile(filePath, next, "utf8");
   return "updated";
+}
+
+export async function upsertMemorySection(filePath: string, section: string): Promise<"created" | "updated"> {
+  return upsertMarkedSection(filePath, section);
 }
 
 export async function fileExists(filePath: string): Promise<boolean> {

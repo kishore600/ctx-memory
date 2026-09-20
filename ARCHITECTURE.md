@@ -49,6 +49,7 @@ Three design principles run through every component, carried over from the idea 
 | Feature | Command / tool | What it does |
 | --- | --- | --- |
 | Store initialization | `memory init` | Creates `.memory/entries/` and `.memory/config.json` in the current git repo |
+| Agent wiring | `memory connect` | Merges the MCP server into `.mcp.json`, `.cursor/mcp.json`, and `.codex/config.toml`, and writes the agent usage instructions into `CLAUDE.md`/`AGENTS.md` |
 | Capture | `memory capture` | Records a decision as a new markdown entry — interactively, or fully via flags for scripting |
 | Supersede | `memory capture --supersedes <id>` | Marks a prior entry `superseded` and links the new one to it — a semantic conflict becomes a normal PR review, not a silent overwrite |
 | Staleness check (fast tier) | `memory check` | Re-fingerprints every entry's refs and cross-checks git history; flags drift with no LLM call |
@@ -372,10 +373,21 @@ agent can query memory live instead of only reading the static generated snapsho
 
 ### Registering the server per tool
 
-Each of these three files already exists in this repo, committed, pointing at
-`npx tsx src/cli.ts mcp` (runs straight from source, no build step) — copy the shape into any
-other project's own config, swapping the `args` for wherever `ctx-memory` actually lives there
-(a built `dist/cli.js` for a consuming repo, or a globally-linked `memory mcp` command).
+`memory connect` (`src/commands/connect.ts` → `src/generators/agentConfig.ts`) writes all three
+configs. It merges into whatever is already there rather than replacing it, refuses to touch a
+config file it can't parse, and is idempotent. By default it registers the absolute path of the
+currently-running CLI, which works regardless of install method.
+
+Two things that look like details but aren't, both learned the hard way in this codebase:
+the JSON merge preserves other servers and unrelated top-level keys (clobbering a team's MCP
+config would be unforgivable for a setup command), and the TOML table is located by exact
+header line rather than regex, because an `args = [...]` value contains a `[` that ends a naive
+`[^\[]*` match early and leaves an orphaned array fragment behind — the same structural-vs-
+substring matching bug that bit the markdown markers.
+
+The hand-written equivalents, if you'd rather not run the command — each of these three files
+also exists in this repo, committed, pointing at `npx tsx src/cli.ts mcp` (runs straight from
+source, no build step):
 
 **Claude Code** — project-scope `.mcp.json` at the repo root, committed so everyone who clones
 the repo gets it automatically:
@@ -429,6 +441,7 @@ Context-Efficiency Tool/
 │   ├── cli.ts                    # commander entry point, wires commands to flags
 │   ├── commands/
 │   │   ├── init.ts               # memory init
+│   │   ├── connect.ts            # memory connect (agent MCP wiring)
 │   │   ├── capture.ts            # memory capture (interactive + flag-driven)
 │   │   ├── check.ts              # memory check (staleness report)
 │   │   ├── generate.ts           # memory generate (CLAUDE.md/AGENTS.md)
@@ -440,7 +453,8 @@ Context-Efficiency Tool/
 │   │   ├── fingerprint.ts        # ref parsing, symbol extraction, hashing
 │   │   └── staleness.ts          # checkRef / checkEntry / checkEntries
 │   ├── generators/
-│   │   └── agentsFile.ts         # render + marker-based upsert into CLAUDE.md/AGENTS.md
+│   │   ├── agentsFile.ts         # render + marker-based upsert into CLAUDE.md/AGENTS.md
+│   │   └── agentConfig.ts        # MCP config merge (JSON + TOML) + usage instructions
 │   └── mcp/
 │       └── server.ts             # MCP tools over stdio
 ├── tests/

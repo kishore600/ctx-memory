@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { runCapture } from "./commands/capture.js";
 import { runCheck } from "./commands/check.js";
+import { runConnect } from "./commands/connect.js";
 import { runGenerate } from "./commands/generate.js";
 import { runInit } from "./commands/init.js";
 import { runList } from "./commands/list.js";
@@ -16,6 +17,20 @@ program
   .description("Initialize a memory store (.memory/) in the current git repo")
   .action(async () => {
     await runInit(process.cwd());
+  });
+
+program
+  .command("connect")
+  .description("Register the MCP server with your AI agents and write agent usage instructions")
+  .option("--agent <agents>", "claude | cursor | codex | all (comma-separated)", "all")
+  .option("--command <command>", 'Override the spawn command, e.g. "memory mcp"')
+  .option("--no-instructions", "Skip writing the usage section into CLAUDE.md / AGENTS.md")
+  .action(async (options) => {
+    await runConnect(process.cwd(), {
+      agent: options.agent,
+      command: options.command,
+      noInstructions: options.instructions === false,
+    });
   });
 
 program
