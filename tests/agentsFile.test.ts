@@ -89,4 +89,28 @@ describe("upsertMemorySection", () => {
     expect(content).toContain("new section");
     expect(content).not.toContain("old section");
   });
+
+  it("ignores marker-like text inline in a body line and still finds the real end marker", async () => {
+    // Regression: an entry whose body literally mentions "<!-- ctx-memory:end -->" (e.g. one
+    // documenting the marker scheme itself) must not be mistaken for the real closing marker.
+    await writeFile(
+      filePath,
+      [
+        "# Header",
+        "<!-- ctx-memory:start -->",
+        "- explains the marker: text between <!-- ctx-memory:start --> and <!-- ctx-memory:end -->, ignored",
+        "<!-- ctx-memory:end -->",
+        "# Footer",
+        "",
+      ].join("\n"),
+      "utf8"
+    );
+    await upsertMemorySection(filePath, "<!-- ctx-memory:start -->\nnew section\n<!-- ctx-memory:end -->");
+    const content = await readFile(filePath, "utf8");
+    expect(content).toContain("# Header");
+    expect(content).toContain("# Footer");
+    expect(content).toContain("new section");
+    expect(content).not.toContain("explains the marker");
+    expect(content.match(/<!-- ctx-memory:end -->/g)?.length).toBe(1);
+  });
 });

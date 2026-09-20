@@ -70,12 +70,20 @@ export async function upsertMemorySection(filePath: string, section: string): Pr
     return "created";
   }
 
-  const startIdx = existing.indexOf(START_MARKER);
-  const endIdx = existing.indexOf(END_MARKER);
+  // Match markers only on lines that consist solely of the marker — an entry's rendered
+  // body can legitimately mention "<!-- ctx-memory:end -->" as plain text (e.g. an entry
+  // documenting this very marker scheme), and a naive indexOf would match that instead of
+  // the real closing marker, corrupting the file.
+  const lines = existing.split("\n");
+  const trimmedLines = lines.map((l) => l.trim());
+  const startLine = trimmedLines.indexOf(START_MARKER);
+  const endLine = trimmedLines.lastIndexOf(END_MARKER);
 
   let next: string;
-  if (startIdx !== -1 && endIdx !== -1) {
-    next = existing.slice(0, startIdx) + section + existing.slice(endIdx + END_MARKER.length);
+  if (startLine !== -1 && endLine !== -1 && endLine >= startLine) {
+    const before = lines.slice(0, startLine).join("\n");
+    const after = lines.slice(endLine + 1).join("\n");
+    next = (before ? before + "\n" : "") + section + (after ? "\n" + after : "\n");
   } else {
     const sep = existing.endsWith("\n") ? "\n" : "\n\n";
     next = existing + sep + section + "\n";
