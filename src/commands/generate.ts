@@ -1,13 +1,18 @@
 import path from "node:path";
 import { getRepoRoot } from "../core/git.js";
 import { listEntries, storeExists } from "../core/store.js";
+import { CURSOR_RULE_PATH, ensureCursorRuleFile } from "../generators/agentConfig.js";
 import { renderMemorySection, upsertMemorySection } from "../generators/agentsFile.js";
 
+export type GenerateTarget = "claude" | "agents" | "cursor" | "all";
+
 export interface GenerateOptions {
-  target?: "claude" | "agents" | "both";
+  target?: GenerateTarget;
 }
 
-const FILE_NAMES: Record<"claude" | "agents", string> = {
+export const GENERATE_TARGETS: GenerateTarget[] = ["claude", "agents", "cursor", "all"];
+
+const ROOT_FILES: Record<"claude" | "agents", string> = {
   claude: "CLAUDE.md",
   agents: "AGENTS.md",
 };
@@ -21,15 +26,23 @@ export async function runGenerate(cwd: string, opts: GenerateOptions): Promise<v
     return;
   }
 
+  const target = opts.target ?? "all";
+  if (!GENERATE_TARGETS.includes(target)) {
+    console.error(`✖ Unknown target "${target}". Use one of: ${GENERATE_TARGETS.join(", ")}.`);
+    process.exitCode = 1;
+    return;
+  }
+
   const entries = await listEntries(repoRoot);
   const section = renderMemorySection(entries);
 
-  const target = opts.target ?? "both";
-  const targets: ("claude" | "agents")[] = target === "both" ? ["claude", "agents"] : [target];
+  const targets: Exclude<GenerateTarget, "all">[] =
+    target === "all" ? ["claude", "agents", "cursor"] : [target];
 
   for (const t of targets) {
-    const filePath = path.join(repoRoot, FILE_NAMES[t]);
+    const filePath = t === "cursor" ? await ensureCursorRuleFile(repoRoot) : path.join(repoRoot, ROOT_FILES[t]);
     const result = await upsertMemorySection(filePath, section);
-    console.log(`✔ ${result === "created" ? "Created" : "Updated"} ${FILE_NAMES[t]}`);
+    const label = t === "cursor" ? CURSOR_RULE_PATH : ROOT_FILES[t];
+    console.log(`✔ ${result === "created" ? "Created" : "Updated"} ${label}`);
   }
 }

@@ -61,8 +61,8 @@ program
 
 program
   .command("generate")
-  .description("Write captured memory into CLAUDE.md and/or AGENTS.md")
-  .option("--target <target>", "claude | agents | both", "both")
+  .description("Write captured memory into CLAUDE.md, AGENTS.md, and Cursor's rules file")
+  .option("--target <target>", "claude | agents | cursor | all", "all")
   .action(async (options) => {
     await runGenerate(process.cwd(), { target: options.target });
   });

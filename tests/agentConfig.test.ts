@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { connectCodex, connectJsonAgent, writeUsageInstructions } from "../src/generators/agentConfig.js";
+import {
+  connectCodex,
+  connectJsonAgent,
+  ensureCursorRuleFile,
+  writeUsageInstructions,
+} from "../src/generators/agentConfig.js";
+import { upsertMarkedSection } from "../src/generators/agentsFile.js";
 
 const SERVER = { command: "node", args: ["/abs/path/cli.js", "mcp"] };
 
@@ -107,6 +113,54 @@ describe("connectCodex", () => {
     expect(toml.match(/\[mcp_servers\.ctx-memory\]/g)?.length).toBe(1);
     expect(toml).toContain('command = "memory"');
     expect(toml).not.toContain("/abs/path/cli.js");
+  });
+});
+
+describe("ensureCursorRuleFile", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-cursor-rule-"));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("creates a .mdc file with the frontmatter Cursor requires", async () => {
+    const filePath = await ensureCursorRuleFile(dir);
+    expect(filePath.endsWith(".mdc")).toBe(true);
+
+    const content = await readFile(filePath, "utf8");
+    expect(content.startsWith("---")).toBe(true);
+    expect(content).toContain("alwaysApply: true");
+    expect(content).toContain("description:");
+  });
+
+  it("preserves frontmatter the user has customized", async () => {
+    const filePath = path.join(dir, ".cursor", "rules", "ctx-memory.mdc");
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(
+      filePath,
+      '---\ndescription: my own wording\nglobs: ["src/**/*.ts"]\nalwaysApply: false\n---\n',
+      "utf8"
+    );
+
+    await ensureCursorRuleFile(dir);
+    const content = await readFile(filePath, "utf8");
+    expect(content).toContain("my own wording");
+    expect(content).toContain('globs: ["src/**/*.ts"]');
+    expect(content).toContain("alwaysApply: false");
+  });
+
+  it("keeps frontmatter above the generated section when content is written into it", async () => {
+    const filePath = await ensureCursorRuleFile(dir);
+    await upsertMarkedSection(filePath, "<!-- ctx-memory:start -->\nnotes here\n<!-- ctx-memory:end -->");
+
+    const content = await readFile(filePath, "utf8");
+    expect(content.startsWith("---")).toBe(true);
+    expect(content.indexOf("alwaysApply")).toBeLessThan(content.indexOf("notes here"));
+    expect(content).toContain("notes here");
   });
 });
 

@@ -134,6 +134,35 @@ export async function connectCodex(repoRoot: string, server: ServerCommand): Pro
   return { agent: "codex", filePath, action: "updated" };
 }
 
+export const CURSOR_RULE_PATH = path.join(".cursor", "rules", "ctx-memory.mdc");
+
+/**
+ * Cursor's own rules system needs a `.mdc` file with YAML frontmatter — a plain `.md` file in
+ * `.cursor/rules/` is ignored outright. Only written on creation, so any `globs` or description
+ * the user tunes afterwards survives regeneration.
+ */
+function cursorFrontmatter(): string {
+  return [
+    "---",
+    "description: Project memory — decisions and the reasoning behind them, captured with ctx-memory",
+    "alwaysApply: true",
+    "---",
+    "",
+  ].join("\n");
+}
+
+/** Ensures the Cursor rules file exists with frontmatter, and returns its absolute path. */
+export async function ensureCursorRuleFile(repoRoot: string): Promise<string> {
+  const filePath = path.join(repoRoot, CURSOR_RULE_PATH);
+  try {
+    await readFile(filePath, "utf8");
+  } catch {
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, cursorFrontmatter(), "utf8");
+  }
+  return filePath;
+}
+
 export function renderUsageSection(): string {
   return [
     USAGE_START,
