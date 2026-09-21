@@ -1,226 +1,545 @@
 # ctx-memory
 
-A local-first, git-backed memory layer for AI coding agents (Claude Code, Cursor, Codex, …).
+**Your AI coding agent forgets why your code is the way it is. This remembers for it.**
 
-It captures decisions and context as small markdown files in `.memory/`, detects when they've
-drifted from the code they describe, and surfaces them back to your agent — either injected into
-`CLAUDE.md` / `AGENTS.md`, or served live over MCP, anchored to the file the agent is touching.
+A small command-line tool that stores project decisions as markdown files in your git repo, feeds
+them to AI agents (Claude Code, Cursor, Codex) at the right moment, and warns you when a note no
+longer matches the code it describes.
 
-This is the **Free / OSS tier** scoped in [`SaaS Product Strategy.md`](./SaaS%20Product%20Strategy.md):
-storage, capture, and local staleness detection. It's built to be interoperable, not a walled garden —
-entries are plain markdown with YAML frontmatter, readable by any tool, versioned by git like everything
-else in the repo.
+No server. No account. No network calls. Everything lives in your repo.
 
-For the full end-to-end picture — every feature, the workflow, architecture and sequence diagrams,
-and a deep-dive on how staleness detection and symbol fingerprinting actually work — see
-[`ARCHITECTURE.md`](./ARCHITECTURE.md).
+---
 
-## Why
+## Table of contents
 
-Every team adding a second developer (or a second AI agent) to a codebase hits the same problem:
-the *why* behind a decision lives in someone's head, a Slack thread, or a stale doc — never where the
-agent can see it while it's making the next decision. See
-[`Project Memory Layer — Idea & Tooling Review.md`](./Project%20Memory%20Layer%20—%20Idea%20&%20Tooling%20Review.md)
-for the full problem writeup. Three principles drive the design:
+- [The problem](#the-problem)
+- [What this tool does](#what-this-tool-does)
+- [Architecture](#architecture)
+- [Install](#install)
+- [Use it in 5 minutes](#use-it-in-5-minutes)
+- [The day-to-day workflow](#the-day-to-day-workflow)
+- [All commands](#all-commands)
+- [How AI agents use it](#how-ai-agents-use-it)
+- [Staleness detection: the main idea](#staleness-detection-the-main-idea)
+- [Compared with existing tools](#compared-with-existing-tools)
+- [What makes this one different](#what-makes-this-one-different)
+- [When this tool is useful (and when it is not)](#when-this-tool-is-useful-and-when-it-is-not)
+- [The memory file format](#the-memory-file-format)
+- [Project layout](#project-layout)
+- [Development](#development)
+- [What is deliberately not built](#what-is-deliberately-not-built)
 
-- **Write friction kills memory systems.** Capture is one command (`memory capture`), never a form.
-- **Untrusted memory is worse than no memory.** Every entry has a hash-based staleness check so you
-  know when to stop trusting it, instead of finding out the hard way.
-- **Retrieval should be anchored, not injected.** The MCP server hands an agent memory for the file
-  it's touching, not the entire store on every turn — no context rot, no wasted tokens.
+---
+
+## The problem
+
+Here is the whole problem in one story.
+
+You set the enterprise discount to **30%**. You did that because **Legal signed a contract that
+requires 30%** — not because it felt right.
+
+```ts
+if (tier === "enterprise") return total * 0.3;
+```
+
+Six months later, someone opens this file. Maybe a new teammate. Maybe an AI agent in a fresh
+session that knows nothing about last year. They see `0.3` and think:
+
+> "Let's try 0.35 for the Q4 push."
+
+The code does not say why. `git blame` says *"update pricing."* Nobody remembers. The contract
+gets broken by a one-character change.
+
+**The reason was never written anywhere the next person would actually look.**
+
+This happens constantly with AI agents, because every new session starts with zero memory of the
+last one. You explain the same constraint again and again — and the one time you forget to, the
+agent quietly undoes a decision you made on purpose.
+
+---
+
+## What this tool does
+
+Three jobs, nothing more:
+
+| # | Job | How |
+| --- | --- | --- |
+| 1 | **Remember** a decision | One command (`memory capture`) writes it to a markdown file in your repo. Your agent can also write one itself, mid-conversation. |
+| 2 | **Deliver** it to the agent at the right time | Two ways: written into `CLAUDE.md`/`AGENTS.md` that agents read at startup, and served live over MCP so the agent can ask "what do I need to know about *this* file?" |
+| 3 | **Keep it honest** | `memory check` compares each note against the code it points at. If the code moved on, the note gets flagged. |
+
+Job 3 is the important one. Every "write down your decisions" system dies the same way: the notes
+rot, somebody gets burned by a wrong answer, and the team stops trusting the whole thing. A note
+that tells you when it has gone out of date is the difference between a tool that lasts and one
+that gets abandoned in month two.
+
+---
+
+## Architecture
+
+Everything is files in your git repo. There is no database and no server.
+
+```mermaid
+flowchart TB
+    You(["You"])
+    Agent(["AI agent<br/>Claude Code · Cursor · Codex"])
+
+    subgraph repo["Your git repo — the single source of truth"]
+        direction TB
+        CODE["your source code<br/>src/pricing.ts"]
+        MEM[".memory/entries/*.md<br/>one markdown file per decision"]
+        DOC["CLAUDE.md / AGENTS.md<br/>read by agents at startup"]
+    end
+
+    You -->|"1 · you run<br/>memory capture"| MEM
+    Agent -->|"1 · or the agent calls<br/>capture_memory"| MEM
+
+    MEM -->|"2 · memory generate"| DOC
+    DOC -->|"3 · agent reads<br/>this at startup"| Agent
+    MEM -->|"3 · or asks live over MCP<br/>get_memory_for_file"| Agent
+
+    MEM --> CHECK{{"4 · memory check"}}
+    CODE -->|"compares git log<br/>+ content hash"| CHECK
+    CHECK -->|"warns you when a note<br/>no longer matches the code"| You
+```
+
+Following the numbers:
+
+1. **A decision gets written down** — either you run one command, or the agent saves the note
+   itself while you are working with it.
+2. **Notes are rolled into `CLAUDE.md` / `AGENTS.md`** — the file agents already read.
+3. **The agent gets the note two ways** — passively at startup from that file, and actively over
+   MCP when it wants to know about one specific file it is editing.
+4. **The tool checks its own notes against reality** — comparing the saved fingerprint to the
+   current code and git history, and flagging the ones that no longer match.
+
+---
 
 ## Install
 
+Requires **Node.js 18+** and **git**.
+
 ```bash
+git clone <this-repo> ctx-memory
+cd ctx-memory
 npm install
 npm run build
-npm link   # optional: makes `memory` available globally
+npm link      # makes the `memory` command available everywhere
 ```
 
-Or run it straight from the repo without linking: `node dist/cli.js <command>`.
+`npm link` is optional. Without it, run the tool with `node /path/to/ctx-memory/dist/cli.js`
+instead of `memory`.
 
-## Quickstart
+---
+
+## Use it in 5 minutes
+
+Go to any git repo you actually work in:
 
 ```bash
-memory init                   # creates .memory/ in the current git repo
-memory connect                # wires the MCP server into Claude Code / Cursor / Codex
-memory capture                # one command, interactive prompts for title/body/refs/tags
-memory generate               # writes captured entries into CLAUDE.md and AGENTS.md
-memory check                  # fast-tier staleness check against the working tree
-memory mcp                    # runs the MCP server over stdio (agents call this, not you)
+cd ~/my-project
+memory init      # creates .memory/ to hold your notes
+memory connect   # wires the tool into Claude Code, Cursor, and Codex
 ```
 
-Adding this to an existing project is `memory init && memory connect` — `connect` merges the
-server into `.mcp.json`, `.cursor/mcp.json`, and `.codex/config.toml` (preserving any servers
-already configured there) and writes the agent usage instructions into `CLAUDE.md`/`AGENTS.md`.
+That is the entire setup. `memory connect` writes the config files your agents need and adds a
+short instruction block to `CLAUDE.md`/`AGENTS.md` telling the agent when to use the tool. It
+**merges** into any config you already have — it never overwrites other MCP servers, and if it
+cannot understand a config file it stops rather than damaging it.
 
-### Capturing non-interactively (for scripts / agent tool calls)
+Now save your first decision:
 
 ```bash
 memory capture \
-  -t "Chose Postgres over Mongo for billing" \
-  -m "Needed multi-document transactions for tax reconciliation; Mongo's driver didn't support that in our deployed version." \
-  -r "src/billing.ts#calculateTax" \
-  --tags architecture,billing
+  -t "Enterprise discount is 30% by contract, not a guess" \
+  -m "Legal signed off on 30% in the 2026 MSA template. Do not change this for conversion experiments without contract review." \
+  -r "src/pricing.ts#calculateDiscount" \
+  --tags pricing,legal
 ```
 
-Supersede a prior entry instead of leaving a stale one around:
+Or just run `memory capture` with no flags and it asks you the questions.
+
+The `-r` flag is the key part. It **anchors** the note to a specific function. That anchor is what
+makes staleness detection possible later.
+
+Finally, push it into the file your agent reads at startup:
 
 ```bash
-memory capture -t "…" -m "…" --supersedes mem_bRW4nIut
+memory generate
 ```
 
-## The memory file format
+Now open that project in Claude Code. Ask it to change the discount. It will already know why
+it is 30%.
 
-One markdown file per entry, under `.memory/entries/`:
-
-```markdown
----
-id: mem_0_1s55r4
-title: Chose Postgres over Mongo for billing
-date: 2026-09-19
-author: kishore.k@dataflo.ai
-tags: [architecture, billing]
-refs: [src/billing.ts#calculateTax]
-supersedes: null
-status: active
-commit: 8f3a1c2
-fingerprint:
-  src/billing.ts#calculateTax: { hash: 7ac9f1e2b3d4c5a6, kind: symbol }
-last_checked: null
 ---
 
-Needed multi-document transactions for tax reconciliation; Mongo's driver didn't
-support that in our deployed version.
+## The day-to-day workflow
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant Tool as memory
+    participant Repo as your repo
+
+    You->>Tool: memory capture (after a real decision)
+    Tool->>Repo: writes .memory/entries/2026-09-21-....md
+    Note over Repo: it is a normal file —<br/>review it in git diff, commit it like code
+
+    You->>Tool: memory generate
+    Tool->>Repo: updates CLAUDE.md / AGENTS.md
+
+    Note over You,Repo: ...weeks pass, code changes...
+
+    You->>Tool: memory check
+    Tool->>Repo: re-reads the anchored code + git history
+    Tool-->>You: "[STALE] discount note — content changed since capture"
+
+    You->>Tool: memory capture --supersedes mem_a8AwCAoR
+    Note over Repo: old note marked superseded,<br/>new one takes over
 ```
 
-`refs` anchor the entry to code. `file.ts` fingerprints the whole file; `file.ts#symbolName`
-fingerprints just that function/class (best-effort extraction — brace-matched for JS/TS/Go/Java-style
-languages, indentation-matched for Python). `supersedes` links to the entry an author explicitly
-replaced — a semantic conflict is resolved as a normal PR review, not a silent overwrite.
+In plain words:
 
-## Staleness detection (fast tier)
+1. **After finishing a task**, if you made a decision someone could undo by accident, run
+   `memory capture`. Takes about 20 seconds.
+2. **Run `memory generate`** so the note reaches agents at startup.
+3. **Run `memory check` before committing** (or wire it into a git hook, below) so you find out
+   when a note has gone stale.
+4. **When a note is wrong**, do not edit it in place — capture a new one with `--supersedes`. The
+   old one stays in git history, so you can see how your thinking changed.
 
-`memory check` re-fingerprints every ref and cross-checks it against git history:
+### Run the check automatically
 
-| Result | Meaning |
-| --- | --- |
-| `[ok]` | Unchanged since capture |
-| `[low]` | Commits touched the file since capture, but the referenced symbol's content is unchanged — probably fine |
-| `[STALE]` | The referenced symbol/file's content changed since capture — the entry may no longer be accurate |
-| `[missing]` | The referenced file or symbol can no longer be found |
-
-```bash
-memory check --fail-on-stale   # exit 1 if anything is flagged — wire into CI or a pre-commit hook
-memory check --write           # persist last_checked + status back into entry frontmatter
-memory check --json            # machine-readable output
-```
-
-This is the "fast tier" from the two-tier design in the strategy doc: pure hash + git-log diffing,
-no LLM call, so it's free and runs on every commit. The LLM-backed "slow tier" (semantic diff → PR
-comment) is scoped as a hosted/paid feature and intentionally isn't part of this local tool.
-
-## Generating CLAUDE.md / AGENTS.md
-
-```bash
-memory generate                 # writes both
-memory generate --target claude # or just one
-```
-
-Entries are grouped by tag and written between `<!-- ctx-memory:start -->` / `<!-- ctx-memory:end -->`
-markers. Anything outside those markers — your own instructions, other sections — is left untouched;
-running `generate` again only replaces what's between the markers.
-
-## MCP server
-
-```bash
-memory mcp
-```
-
-Runs over stdio, exposing:
-
-- `search_memory({ query?, tag? })` — keyword search over active entries
-- `get_memory_for_file({ path })` — anchored retrieval for a file the agent is about to touch
-- `get_memory_entry({ id })` — full entry content by id
-- `list_stale_memory()` — entries flagged by the fast-tier check
-- `capture_memory({ title, body, refs?, tags? })` — lets the agent propose a new entry; it's written
-  straight to a git-tracked file for you to review at your next commit, same as anything else the
-  agent writes — never committed on your behalf.
-
-### Setting it up per agent
-
-`memory connect` writes all of this for you and is the recommended path:
-
-```bash
-memory connect                        # all three agents
-memory connect --agent claude,cursor  # just some of them
-memory connect --command "memory mcp" # override the spawn command (e.g. if globally linked)
-memory connect --no-instructions      # skip the CLAUDE.md/AGENTS.md usage section
-```
-
-It merges into any config already present rather than replacing it, refuses to touch a config
-file it can't parse, and is idempotent — re-running reports `unchanged`. By default it registers
-the absolute path of the CLI that's running, so it works whether ctx-memory is globally linked,
-cloned from source, or referenced from another repo.
-
-The equivalent by hand, if you'd rather write the files yourself:
-
-**Claude Code** — project-scope `.mcp.json` at the repo root (commit it so the whole team gets
-it on clone):
-
-```json
-{
-  "mcpServers": {
-    "ctx-memory": {
-      "command": "npx",
-      "args": ["tsx", "src/cli.ts", "mcp"]
-    }
-  }
-}
-```
-
-**Cursor** — identical JSON shape, at `.cursor/mcp.json`.
-
-**Codex CLI** — TOML, not JSON, at `.codex/config.toml`, and Codex only reads it for projects
-you've marked trusted (`codex trust` on the repo once):
-
-```toml
-[mcp_servers.ctx-memory]
-command = "npx"
-args = ["tsx", "src/cli.ts", "mcp"]
-```
-
-### Getting an agent to actually use it
-
-Registering the server makes the tools *available* — it doesn't make an agent reach for them.
-That takes a written instruction the agent reads at session start, which is why `memory connect`
-also writes a "Working with project memory" block into `CLAUDE.md`/`AGENTS.md`, in its own
-`ctx-memory:usage` markers above the generated memory section so both survive each other.
-Full rationale in [ARCHITECTURE.md](./ARCHITECTURE.md) §9.
-
-## Pre-commit hook
+Put this in `.git/hooks/pre-commit` and make it executable:
 
 ```bash
 #!/bin/sh
 memory check --fail-on-stale || {
-  echo "Some memory entries look stale — run 'memory check' for details."
+  echo "Some memory notes look stale — run 'memory check' to see them."
   exit 1
 }
 ```
 
-## What's deliberately not here
+`--fail-on-stale` exits with code `1` when something is flagged, so it also works as a CI step.
 
-Per the strategy doc's own scoring: no raw session-transcript extractor (undocumented vendor
-formats, poor signal-to-noise), no home-grown secret scanner (wrap gitleaks/trufflehog instead), and
-no hosted control plane (dashboard, cross-repo aggregation, billing, SSO) — that's the paid layer
-described in [`SaaS Product Strategy.md`](./SaaS%20Product%20Strategy.md) §5–8, deliberately out of
-scope for this local-first tool.
+---
+
+## All commands
+
+| Command | What it does |
+| --- | --- |
+| `memory init` | Creates `.memory/` in the current git repo. Run once per project. |
+| `memory connect` | Registers the tool with Claude Code, Cursor and Codex, and writes agent instructions into `CLAUDE.md`/`AGENTS.md`. |
+| `memory capture` | Saves a new decision. Interactive, or scripted with flags. |
+| `memory generate` | Writes your notes into `CLAUDE.md` / `AGENTS.md`. |
+| `memory check` | Compares every note against the current code. Reports what has gone stale. |
+| `memory list` | Shows all saved notes. |
+| `memory mcp` | Runs the MCP server. **Agents run this, not you.** |
+
+Useful flags:
+
+```bash
+memory capture --supersedes mem_ab12cd34   # replace an outdated note
+memory check --fail-on-stale               # exit 1 if stale (for CI / git hooks)
+memory check --json                        # machine-readable output
+memory check --write                       # save the check result into the note files
+memory generate --target claude            # only CLAUDE.md, not AGENTS.md
+memory list --tag pricing                  # filter by tag
+memory connect --agent claude,cursor       # only wire up some agents
+memory connect --command "memory mcp"      # override how the server is launched
+```
+
+---
+
+## How AI agents use it
+
+`memory connect` sets this up for you. Here is what it actually configures.
+
+**The config files it writes:**
+
+| Agent | File | Format |
+| --- | --- | --- |
+| Claude Code | `.mcp.json` | JSON, picked up automatically when the project opens |
+| Cursor | `.cursor/mcp.json` | Same JSON shape |
+| Codex CLI | `.codex/config.toml` | TOML — a different format. Also needs `codex trust` on the repo once. |
+
+**The five tools your agent gets:**
+
+| Tool | When the agent uses it |
+| --- | --- |
+| `get_memory_for_file` | Before editing a file — "what do I need to know about this one?" |
+| `search_memory` | Before a big decision — "has this already been decided?" |
+| `get_memory_entry` | To read one note in full |
+| `list_stale_memory` | To check whether a note can still be trusted |
+| `capture_memory` | To save a new decision during your conversation |
+
+### The part people get wrong
+
+Registering the tools only makes them **available**. It does not make an agent **use** them. An
+agent will not think to check your notes unless something tells it to.
+
+That is why `memory connect` also writes a short instruction block into `CLAUDE.md`/`AGENTS.md`:
+
+> - **Before editing a file**, call `get_memory_for_file` with its path.
+> - **Before a non-obvious choice**, call `search_memory` first.
+> - **When you land on a decision worth remembering**, call `capture_memory`.
+
+Without that block, the tools sit there unused. With it, the agent checks your notes on its own.
+
+### Agent-written notes are safe
+
+When an agent calls `capture_memory`, it writes a normal file into `.memory/`. It **never commits
+anything**. The note shows up in `git diff` like any other change, and you approve it the same way
+you approve code. Nothing enters your project's history without you looking at it.
+
+---
+
+## Staleness detection: the main idea
+
+This is the part that other note-taking approaches do not do.
+
+When you save a note, the tool records a **fingerprint**: a hash of the exact function or file you
+anchored to, plus the current git commit. Later, `memory check` recomputes that fingerprint and
+compares.
+
+```mermaid
+flowchart TD
+    A["check each anchored ref"] --> B{"does the file/function<br/>still exist?"}
+    B -- "no" --> MISSING["[missing]<br/>the code was renamed or deleted"]
+    B -- "yes" --> C{"is the content<br/>identical to before?"}
+    C -- "no" --> HIGH["[STALE]<br/>the code changed — check this note"]
+    C -- "yes" --> D{"did any commit<br/>touch this file?"}
+    D -- "yes" --> LOW["[low]<br/>file changed, but your function didn't —<br/>probably still fine"]
+    D -- "no" --> FRESH["[ok]<br/>nothing has moved"]
+```
+
+Why four levels instead of just "stale / not stale"? Because a file-level check cries wolf. If
+someone edits a different function in the same file, a naive tool flags your note and you learn to
+ignore the warnings. Anchoring to `src/pricing.ts#calculateDiscount` means you are only alerted
+when **that function** actually changed.
+
+Real example from this repo: a refactor split one function into two. `memory check` flagged the
+note pointing at the old one, the note got superseded with a corrected anchor, and the
+documentation stayed true. That is the loop working.
+
+**No AI is involved in this check.** It is hashes and `git log` — fast, free, and it runs on every
+commit. It tells you *that* something changed, not *whether the reasoning still holds*. A human
+still makes that call.
+
+---
+
+## Compared with existing tools
+
+Honest version, researched September 2026.
+
+### Free things people already use
+
+| Approach | What it gives you | Where it falls short |
+| --- | --- | --- |
+| **Hand-written `CLAUDE.md` / `AGENTS.md`** | Free, in git, read by nearly every AI tool. Genuinely solves ~60% of this problem with zero setup. | One growing file. Nothing tells you when a line has gone out of date. Everything gets loaded every time, whether relevant or not. |
+| **Comments in the code** | Right next to the code | Nobody writes "we rejected Mongo because…" in a comment. Comments explain *what*, rarely *why not*. |
+| **A wiki / Notion page** | Nice to read | Lives outside the repo, so the agent never sees it and it drifts silently. |
+| **basic-memory** | Markdown notes over MCP — close to this design | General-purpose notes, not anchored to code, so no drift detection. |
+| **projectmem** (MIT, free) | Native MCP across major agents, append-only event log, **and it ships staleness detection too** | The closest thing to this tool. If it fits you, use it — see the honesty note below. |
+
+### Commercial tools
+
+| Tool | What it is | Price |
+| --- | --- | --- |
+| **Swimm** | Docs that flag drift as a PR check — the paid version of the staleness idea | ~$39/month per team (≤10 users) |
+| **Greptile** | Answers questions about your code, AI code review | Free tier (50 reviews/mo) → $30/seat/mo + $1/review |
+| **Sourcegraph Cody** | Code intelligence and search | ~$59/seat/mo, enterprise only |
+| **mem0** | Hosted memory API for AI apps | Free (10k memories) → $19/mo → $249/mo |
+| **Zep / Graphiti** | Temporal knowledge graph for agent memory | Free (10k msgs) → ~$99–125/mo |
+| **GitHub Copilot** | Code completion and chat | $19/seat/mo → $39/seat/mo |
+
+The code-search tools (Greptile, Sourcegraph) are **not competitors** — they answer *"what does
+this code do?"*. They do not hold *"why did we choose this, and what did we reject?"*. Run them
+alongside this, not instead of it.
+
+---
+
+## What makes this one different
+
+Five concrete design choices:
+
+1. **Anchored to symbols, not files.** A note points at `pricing.ts#calculateDiscount`, not just
+   `pricing.ts`. Unrelated edits in the same file do not trigger false alarms.
+2. **Four staleness levels, not a yes/no flag.** "Your function changed" and "someone else edited
+   this file" are different situations and get different warnings.
+3. **Delivered two ways.** Generated into `CLAUDE.md` for agents with no MCP support, *and* served
+   live over MCP for agents that have it. You are not locked to one delivery method.
+4. **Plain markdown, one file per note.** Open them in any editor. `git diff`, `git blame` and
+   merges all work normally. If you delete this tool tomorrow, your notes are still readable.
+5. **One command to set up across three agents.** `memory connect` handles the config *and* the
+   instructions that make an agent actually use it.
+
+### An honest note
+
+This is not a category-defining invention, and you should know that before investing in it.
+
+**projectmem** is free, MIT-licensed, and already ships local staleness detection across the same
+agents. A plain hand-written `CLAUDE.md` gets you most of the way for zero effort. If either of
+those fits your situation, use them — the goal is that your decisions survive, not that you use
+this particular tool.
+
+What this one offers is symbol-level anchoring, the four-level check, dual delivery, and one
+command to wire it all up. Whether that is worth switching for depends entirely on the next
+section.
+
+---
+
+## When this tool is useful (and when it is not)
+
+Five honest tests. **If you answer "no" to most of these, you do not need this tool** — a
+hand-written `CLAUDE.md` will serve you better with less ceremony.
+
+| Test | Worth it when | Skip it when |
+| --- | --- | --- |
+| **Are the reasons invisible?** | The *why* cannot be recovered by reading the code — "Legal requires 30%", "we tried X, it deadlocked" | Your choices are obvious from the code itself |
+| **Does the code move?** | Files change often enough that written context goes stale | The codebase is basically frozen — a wiki is fine |
+| **How long is the gap?** | Months pass between a decision and the next person needing it | You will still remember next week |
+| **How many minds touch it?** | Several developers — **or many fresh AI sessions, each starting from zero** | One person, one continuous train of thought |
+| **What does a mistake cost?** | A broken contract, an outage, a week of rework | Twenty minutes of rework |
+
+**That fourth row matters most today.** You do not need a big team to have a memory problem
+anymore. If you work alone but run dozens of AI agent sessions, every one of those sessions is a
+new person who knows nothing. That is the same problem as onboarding a teammate, over and over.
+
+### The honest failure mode
+
+The thing that kills tools like this is not bugs. It is that **nobody writes the notes**.
+
+So test it properly. Pick **one** real project — not all of them. Use it for three weeks. Then ask:
+
+> Are notes getting written without me forcing myself to write them?
+
+If yes, it is earning its place. If you are nagging yourself, the friction won, and no amount of
+polish will fix that. Better to find that out in three weeks on one project than in six months
+across ten.
+
+---
+
+## The memory file format
+
+One markdown file per note, in `.memory/entries/`. Nothing proprietary.
+
+```markdown
+---
+id: mem_a8AwCAoR
+title: Enterprise discount is 30% by contract, not a guess
+date: 2026-09-21
+author: you@example.com
+tags: [pricing, legal]
+refs: [src/pricing.ts#calculateDiscount]
+supersedes: null
+status: active
+commit: 8f3a1c2
+fingerprint:
+  src/pricing.ts#calculateDiscount: { hash: 7ac9f1e2b3d4c5a6, kind: symbol }
+last_checked: null
+---
+
+Legal signed off on 30% in the 2026 MSA template. Do not change this for
+conversion experiments without contract review.
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Permanent identifier for this note |
+| `title` | One-line summary, shown in lists and reports |
+| `date` / `author` | Who wrote it and when — taken from your git config |
+| `tags` | Free-form labels, used to group notes in the generated file |
+| `refs` | The anchors: `path/to/file.ts` or `path/to/file.ts#functionName` |
+| `supersedes` | The `id` of a note this one replaces |
+| `status` | `active`, `stale`, or `superseded` |
+| `commit` | The commit you were on when you wrote it — the baseline for checks |
+| `fingerprint` | Hash of the anchored code at the time of writing |
+| `last_checked` | When `memory check --write` last looked at it |
+
+**Anchoring supports two shapes:**
+
+- `src/pricing.ts` — watches the whole file
+- `src/pricing.ts#calculateDiscount` — watches only that function or class
+
+Function detection works on brace languages (JavaScript, TypeScript, Go, Java, C#…) and
+indentation languages (Python). If a function cannot be found, the tool falls back to watching the
+whole file rather than failing.
+
+---
+
+## Project layout
+
+```
+ctx-memory/
+├── src/
+│   ├── cli.ts                    # command-line entry point
+│   ├── commands/                 # one file per command
+│   │   ├── init.ts
+│   │   ├── connect.ts            # agent setup
+│   │   ├── capture.ts
+│   │   ├── check.ts              # staleness report
+│   │   ├── generate.ts
+│   │   └── list.ts
+│   ├── core/
+│   │   ├── schema.ts             # what a valid note looks like
+│   │   ├── store.ts              # reading and writing note files
+│   │   ├── git.ts                # author, commit, "what changed since"
+│   │   ├── fingerprint.ts        # finding a function and hashing it
+│   │   └── staleness.ts          # the four-level decision
+│   ├── generators/
+│   │   ├── agentsFile.ts         # writing into CLAUDE.md / AGENTS.md
+│   │   └── agentConfig.ts        # writing agent MCP configs
+│   └── mcp/
+│       └── server.ts             # the five tools agents call
+├── tests/                        # 34 tests, including real git repos
+├── .memory/entries/              # this project's own notes about itself
+├── CLAUDE.md / AGENTS.md         # generated — agent instructions + notes
+├── .mcp.json                     # generated — Claude Code config
+├── .cursor/mcp.json              # generated — Cursor config
+└── .codex/config.toml            # generated — Codex config
+```
+
+The generated files are checked in on purpose. Anyone who clones this repo gets the memory
+tooling working immediately, with no setup.
+
+---
 
 ## Development
 
 ```bash
-npm run build       # tsc → dist/
-npm run typecheck   # tsc --noEmit
-npm test            # vitest
-npm run dev -- <command>   # run the CLI from source via tsx, no build step
+npm run build       # compile TypeScript into dist/
+npm run typecheck   # type check without emitting
+npm test            # run the test suite
+npm run dev -- list # run a command straight from source, no build
 ```
+
+**34 tests across 5 files.** The staleness tests are not mocked — they create real temporary git
+repos, make real commits, and assert that each of the four levels comes out right. That is how the
+two nastiest bugs in this codebase were caught before release:
+
+- A function whose signature spanned six lines was fingerprinted from its declaration line only,
+  so changes to its body went undetected.
+- A config-merging routine matched a TOML table with a regex that stopped at the first `[` — which
+  is inside the `args = [...]` value — corrupting the file it was supposed to update.
+
+Both were the same underlying mistake: matching text by substring instead of by structure.
+
+---
+
+## What is deliberately not built
+
+Saying no is part of the design.
+
+| Not built | Why |
+| --- | --- |
+| **Reading raw AI session transcripts** | The file formats are undocumented and change with every vendor update. The signal is poor — a model cannot tell a real decision from an idea you abandoned. |
+| **A custom secret scanner** | Use gitleaks or trufflehog. Never write your own. |
+| **An AI-powered "does this note still make sense" check** | Costs money on every run and produces uncertain answers. The free hash check tells you *what changed*; you decide what it means. |
+| **A hosted dashboard, team accounts, billing** | That is a different product with servers, security and a support burden. This one stays local and free. |
+| **Automatic commits** | Nothing enters your git history without you reviewing it. That is the whole trust model. |
+
+---
+
+MIT licensed. Built to be thrown away if something better comes along — your notes are just
+markdown, and they will outlive this tool.
