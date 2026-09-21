@@ -88,7 +88,7 @@ flowchart TB
         direction TB
         CODE["your source code<br/>src/pricing.ts"]
         MEM[".memory/entries/*.md<br/>one markdown file per decision"]
-        DOC["CLAUDE.md / AGENTS.md<br/>read by agents at startup"]
+        DOC["CLAUDE.md || Codex.md || Cursor.md / AGENTS.md<br/>read by agents at startup"]
     end
 
     You -->|"1 · you run<br/>memory capture"| MEM
