@@ -65,7 +65,7 @@ Three jobs, nothing more:
 | # | Job | How |
 | --- | --- | --- |
 | 1 | **Remember** a decision | One command (`memory capture`) writes it to a markdown file in your repo. Your agent can also write one itself, mid-conversation. |
-| 2 | **Deliver** it to the agent at the right time | Two ways: written into the files agents read at startup (`CLAUDE.md`, `AGENTS.md`, Cursor's rules file), and served live over MCP so the agent can ask "what do I need to know about *this* file?" |
+| 2 | **Deliver** it to the agent at the right time | Two ways: written into the files agents read at startup (`.claude/CLAUDE.md`, `AGENTS.md`, Cursor's rules file), and served live over MCP so the agent can ask "what do I need to know about *this* file?" |
 | 3 | **Keep it honest** | `memory check` compares each note against the code it points at. If the code moved on, the note gets flagged. |
 
 Job 3 is the important one. Every "write down your decisions" system dies the same way: the notes
@@ -88,7 +88,7 @@ flowchart TB
         direction TB
         CODE["your source code<br/>src/pricing.ts"]
         MEM[".memory/entries/*.md<br/>one markdown file per decision"]
-        DOC["CLAUDE.md · AGENTS.md<br/>.cursor/rules/ctx-memory.mdc<br/>read by agents at startup"]
+        DOC[".claude/CLAUDE.md · AGENTS.md<br/>.cursor/rules/ctx-memory.mdc<br/>read by agents at startup"]
     end
 
     You -->|"1 · you run<br/>memory capture"| MEM
@@ -107,8 +107,8 @@ Following the numbers:
 
 1. **A decision gets written down** — either you run one command, or the agent saves the note
    itself while you are working with it.
-2. **Notes are rolled into the files agents already read** — `CLAUDE.md`, `AGENTS.md`, and
-   Cursor's own rules file. One command writes all three.
+2. **Notes are rolled into the files agents already read** — `.claude/CLAUDE.md`, `AGENTS.md`,
+   and Cursor's own rules file. One command writes all three.
 3. **The agent gets the note two ways** — passively at startup from that file, and actively over
    MCP when it wants to know about one specific file it is editing.
 4. **The tool checks its own notes against reality** — comparing the saved fingerprint to the
@@ -144,7 +144,7 @@ memory connect   # wires the tool into Claude Code, Cursor, and Codex
 ```
 
 That is the entire setup. `memory connect` writes the config files your agents need and adds a
-short instruction block to `CLAUDE.md`/`AGENTS.md` telling the agent when to use the tool. It
+short instruction block to `.claude/CLAUDE.md` and `AGENTS.md` telling the agent when to use it. It
 **merges** into any config you already have — it never overwrites other MCP servers, and if it
 cannot understand a config file it stops rather than damaging it.
 
@@ -178,7 +178,7 @@ already know why it is 30%.
 
 | File | Read by | Why this file |
 | --- | --- | --- |
-| `CLAUDE.md` | Claude Code | Claude Code's own convention |
+| `.claude/CLAUDE.md` | Claude Code | Claude Code reads a project CLAUDE.md from either the repo root or `.claude/`; this keeps the root clean |
 | `AGENTS.md` | **Codex**, Cursor, Copilot, Gemini CLI, Windsurf, Zed and others | The vendor-neutral standard, now stewarded under the Linux Foundation and used by 60k+ projects |
 | `.cursor/rules/ctx-memory.mdc` | Cursor | Cursor reads `AGENTS.md` too, but this is its *native* rules format, which supports per-file scoping |
 
@@ -188,11 +188,14 @@ Two things worth knowing, because the naming trips people up:
 - **There is no `Cursor.md`.** Cursor uses `.cursor/rules/*.mdc` files, and the `.mdc` extension is
   required — a plain `.md` file dropped in that folder is silently ignored, because Cursor needs
   the YAML frontmatter to know when to apply the rule.
+- **Don't keep a root `CLAUDE.md` as well.** Claude Code loads `./CLAUDE.md` *and*
+  `./.claude/CLAUDE.md` when both exist, so a leftover root copy injects every note twice and
+  wastes context. `memory generate` warns you if it spots one.
 
 Generate just one if you prefer:
 
 ```bash
-memory generate --target claude   # only CLAUDE.md
+memory generate --target claude   # only .claude/CLAUDE.md
 memory generate --target agents   # only AGENTS.md
 memory generate --target cursor   # only the Cursor rules file
 memory generate --target all      # all three (the default)
@@ -237,7 +240,7 @@ sequenceDiagram
     Note over Repo: it is a normal file —<br/>review it in git diff, commit it like code
 
     You->>Tool: memory generate
-    Tool->>Repo: updates CLAUDE.md, AGENTS.md,<br/>and the Cursor rules file
+    Tool->>Repo: updates .claude/CLAUDE.md, AGENTS.md,<br/>and the Cursor rules file
 
     Note over You,Repo: ...weeks pass, code changes...
 
@@ -282,7 +285,7 @@ memory check --fail-on-stale || {
 | `memory init` | Creates `.memory/` in the current git repo. Run once per project. |
 | `memory connect` | Registers the tool with Claude Code, Cursor and Codex, and writes agent instructions into `CLAUDE.md`/`AGENTS.md`. |
 | `memory capture` | Saves a new decision. Interactive, or scripted with flags. |
-| `memory generate` | Writes your notes into `CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/ctx-memory.mdc`. |
+| `memory generate` | Writes your notes into `.claude/CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/ctx-memory.mdc`. |
 | `memory check` | Compares every note against the current code. Reports what has gone stale. |
 | `memory list` | Shows all saved notes. |
 | `memory mcp` | Runs the MCP server. **Agents run this, not you.** |
@@ -545,7 +548,8 @@ ctx-memory/
 │       └── server.ts             # the five tools agents call
 ├── tests/                        # 34 tests, including real git repos
 ├── .memory/entries/              # this project's own notes about itself
-├── CLAUDE.md / AGENTS.md         # generated — agent instructions + notes
+├── .claude/CLAUDE.md             # generated — agent instructions + notes
+├── AGENTS.md                     # generated — same, for Codex/Cursor/Copilot/…
 ├── .cursor/rules/ctx-memory.mdc  # generated — same notes, Cursor's native format
 ├── .mcp.json                     # generated — Claude Code config
 ├── .cursor/mcp.json              # generated — Cursor config

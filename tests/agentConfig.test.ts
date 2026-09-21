@@ -6,6 +6,7 @@ import {
   connectCodex,
   connectJsonAgent,
   ensureCursorRuleFile,
+  hasLegacyRootClaudeFile,
   writeUsageInstructions,
 } from "../src/generators/agentConfig.js";
 import { upsertMarkedSection } from "../src/generators/agentsFile.js";
@@ -161,6 +162,36 @@ describe("ensureCursorRuleFile", () => {
     expect(content.startsWith("---")).toBe(true);
     expect(content.indexOf("alwaysApply")).toBeLessThan(content.indexOf("notes here"));
     expect(content).toContain("notes here");
+  });
+});
+
+describe("hasLegacyRootClaudeFile", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-legacy-"));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("is false when no root CLAUDE.md exists", async () => {
+    expect(await hasLegacyRootClaudeFile(dir)).toBe(false);
+  });
+
+  it("is false for a root CLAUDE.md that is purely hand-written", async () => {
+    await writeFile(path.join(dir, "CLAUDE.md"), "# My own notes\n\nNothing to do with this tool.\n", "utf8");
+    expect(await hasLegacyRootClaudeFile(dir)).toBe(false);
+  });
+
+  it("is true when a root CLAUDE.md carries our generated block", async () => {
+    await writeFile(
+      path.join(dir, "CLAUDE.md"),
+      "<!-- ctx-memory:start -->\n## Project Memory\n<!-- ctx-memory:end -->\n",
+      "utf8"
+    );
+    expect(await hasLegacyRootClaudeFile(dir)).toBe(true);
   });
 });
 

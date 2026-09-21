@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { getRepoRoot, isGitRepo } from "../core/git.js";
 import { storeExists } from "../core/store.js";
 import {
+  AGENTS_FILE_PATH,
+  CLAUDE_FILE_PATH,
   connectCodex,
   connectJsonAgent,
   defaultServerCommand,
@@ -81,7 +83,7 @@ export async function runConnect(cwd: string, opts: ConnectOptions): Promise<voi
   }
 
   if (!opts.noInstructions) {
-    for (const fileName of ["CLAUDE.md", "AGENTS.md"]) {
+    for (const fileName of [CLAUDE_FILE_PATH, AGENTS_FILE_PATH]) {
       const action = await writeUsageInstructions(repoRoot, fileName);
       console.log(`✔ ${"docs".padEnd(6)} ${action.padEnd(9)} ${fileName}`);
     }

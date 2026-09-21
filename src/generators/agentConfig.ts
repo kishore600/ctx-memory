@@ -136,6 +136,13 @@ export async function connectCodex(repoRoot: string, server: ServerCommand): Pro
 
 export const CURSOR_RULE_PATH = path.join(".cursor", "rules", "ctx-memory.mdc");
 
+/** Claude Code reads a project CLAUDE.md from either the repo root or `.claude/`. */
+export const CLAUDE_FILE_PATH = path.join(".claude", "CLAUDE.md");
+export const CLAUDE_LEGACY_ROOT_PATH = "CLAUDE.md";
+
+/** Codex, Copilot, Gemini CLI, Windsurf and Zed all read this one, and it must sit at the repo root. */
+export const AGENTS_FILE_PATH = "AGENTS.md";
+
 /**
  * Cursor's own rules system needs a `.mdc` file with YAML frontmatter — a plain `.md` file in
  * `.cursor/rules/` is ignored outright. Only written on creation, so any `globs` or description
@@ -192,9 +199,24 @@ export function renderUsageSection(): string {
 
 /** Writes the agent usage instructions above the generated memory block, if one exists. */
 export async function writeUsageInstructions(repoRoot: string, fileName: string): Promise<"created" | "updated"> {
-  return upsertMarkedSection(path.join(repoRoot, fileName), renderUsageSection(), {
+  const filePath = path.join(repoRoot, fileName);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  return upsertMarkedSection(filePath, renderUsageSection(), {
     startMarker: USAGE_START,
     endMarker: USAGE_END,
     insertBefore: MEMORY_START,
   });
+}
+
+/**
+ * Claude Code loads BOTH `./CLAUDE.md` and `./.claude/CLAUDE.md` when both exist, so a leftover
+ * root file would inject every note twice. Returns true when one is present and ours.
+ */
+export async function hasLegacyRootClaudeFile(repoRoot: string): Promise<boolean> {
+  try {
+    const content = await readFile(path.join(repoRoot, CLAUDE_LEGACY_ROOT_PATH), "utf8");
+    return content.includes(MEMORY_START) || content.includes(USAGE_START);
+  } catch {
+    return false;
+  }
 }

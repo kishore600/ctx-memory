@@ -1,7 +1,15 @@
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { getRepoRoot } from "../core/git.js";
 import { listEntries, storeExists } from "../core/store.js";
-import { CURSOR_RULE_PATH, ensureCursorRuleFile } from "../generators/agentConfig.js";
+import {
+  AGENTS_FILE_PATH,
+  CLAUDE_FILE_PATH,
+  CLAUDE_LEGACY_ROOT_PATH,
+  CURSOR_RULE_PATH,
+  ensureCursorRuleFile,
+  hasLegacyRootClaudeFile,
+} from "../generators/agentConfig.js";
 import { renderMemorySection, upsertMemorySection } from "../generators/agentsFile.js";
 
 export type GenerateTarget = "claude" | "agents" | "cursor" | "all";
@@ -12,9 +20,10 @@ export interface GenerateOptions {
 
 export const GENERATE_TARGETS: GenerateTarget[] = ["claude", "agents", "cursor", "all"];
 
-const ROOT_FILES: Record<"claude" | "agents", string> = {
-  claude: "CLAUDE.md",
-  agents: "AGENTS.md",
+const TARGET_PATHS: Record<Exclude<GenerateTarget, "all">, string> = {
+  claude: CLAUDE_FILE_PATH,
+  agents: AGENTS_FILE_PATH,
+  cursor: CURSOR_RULE_PATH,
 };
 
 export async function runGenerate(cwd: string, opts: GenerateOptions): Promise<void> {
@@ -40,9 +49,21 @@ export async function runGenerate(cwd: string, opts: GenerateOptions): Promise<v
     target === "all" ? ["claude", "agents", "cursor"] : [target];
 
   for (const t of targets) {
-    const filePath = t === "cursor" ? await ensureCursorRuleFile(repoRoot) : path.join(repoRoot, ROOT_FILES[t]);
+    const relPath = TARGET_PATHS[t];
+    const filePath = path.join(repoRoot, relPath);
+    if (t === "cursor") {
+      await ensureCursorRuleFile(repoRoot);
+    } else {
+      await mkdir(path.dirname(filePath), { recursive: true });
+    }
     const result = await upsertMemorySection(filePath, section);
-    const label = t === "cursor" ? CURSOR_RULE_PATH : ROOT_FILES[t];
-    console.log(`✔ ${result === "created" ? "Created" : "Updated"} ${label}`);
+    console.log(`✔ ${result === "created" ? "Created" : "Updated"} ${relPath}`);
+  }
+
+  if (targets.includes("claude") && (await hasLegacyRootClaudeFile(repoRoot))) {
+    console.warn(
+      `⚠ ${CLAUDE_LEGACY_ROOT_PATH} still exists at the repo root. Claude Code loads it ` +
+        `alongside ${CLAUDE_FILE_PATH}, so your notes will be injected twice — delete the root one.`
+    );
   }
 }
