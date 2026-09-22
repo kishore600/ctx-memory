@@ -8,7 +8,7 @@ describe("memory store", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-store-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-store-"));
     await initStore(dir);
   });
 

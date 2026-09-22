@@ -17,7 +17,7 @@ describe("connectJsonAgent", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-connect-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-connect-"));
   });
 
   afterEach(async () => {
@@ -28,7 +28,7 @@ describe("connectJsonAgent", () => {
     const result = await connectJsonAgent(dir, "claude", SERVER);
     expect(result.action).toBe("created");
     const config = JSON.parse(await readFile(path.join(dir, ".mcp.json"), "utf8"));
-    expect(config.mcpServers["ctx-memory"]).toEqual(SERVER);
+    expect(config.mcpServers["whyanchor"]).toEqual(SERVER);
   });
 
   it("preserves other servers already configured", async () => {
@@ -43,7 +43,7 @@ describe("connectJsonAgent", () => {
 
     const config = JSON.parse(await readFile(path.join(dir, ".mcp.json"), "utf8"));
     expect(config.mcpServers["existing-server"]).toEqual({ command: "node", args: ["other.js"] });
-    expect(config.mcpServers["ctx-memory"]).toEqual(SERVER);
+    expect(config.mcpServers["whyanchor"]).toEqual(SERVER);
   });
 
   it("preserves unrelated top-level keys", async () => {
@@ -68,7 +68,7 @@ describe("connectJsonAgent", () => {
   it("writes Cursor config to .cursor/mcp.json", async () => {
     await connectJsonAgent(dir, "cursor", SERVER);
     const config = JSON.parse(await readFile(path.join(dir, ".cursor", "mcp.json"), "utf8"));
-    expect(config.mcpServers["ctx-memory"]).toEqual(SERVER);
+    expect(config.mcpServers["whyanchor"]).toEqual(SERVER);
   });
 });
 
@@ -76,7 +76,7 @@ describe("connectCodex", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-codex-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-codex-"));
   });
 
   afterEach(async () => {
@@ -87,7 +87,7 @@ describe("connectCodex", () => {
     const result = await connectCodex(dir, SERVER);
     expect(result.action).toBe("created");
     const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
-    expect(toml).toContain("[mcp_servers.ctx-memory]");
+    expect(toml).toContain("[mcp_servers.whyanchor]");
     expect(toml).toContain('command = "node"');
     expect(toml).toContain('args = ["/abs/path/cli.js", "mcp"]');
   });
@@ -104,15 +104,15 @@ describe("connectCodex", () => {
     const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
     expect(toml).toContain('model = "gpt-5"');
     expect(toml).toContain("[mcp_servers.other]");
-    expect(toml).toContain("[mcp_servers.ctx-memory]");
+    expect(toml).toContain("[mcp_servers.whyanchor]");
   });
 
-  it("replaces an existing ctx-memory table instead of duplicating it", async () => {
+  it("replaces an existing whyanchor table instead of duplicating it", async () => {
     await connectCodex(dir, SERVER);
-    await connectCodex(dir, { command: "memory", args: ["mcp"] });
+    await connectCodex(dir, { command: "whyanchor", args: ["mcp"] });
     const toml = await readFile(path.join(dir, ".codex", "config.toml"), "utf8");
-    expect(toml.match(/\[mcp_servers\.ctx-memory\]/g)?.length).toBe(1);
-    expect(toml).toContain('command = "memory"');
+    expect(toml.match(/\[mcp_servers\.whyanchor\]/g)?.length).toBe(1);
+    expect(toml).toContain('command = "whyanchor"');
     expect(toml).not.toContain("/abs/path/cli.js");
   });
 });
@@ -121,7 +121,7 @@ describe("ensureCursorRuleFile", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-cursor-rule-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-cursor-rule-"));
   });
 
   afterEach(async () => {
@@ -139,7 +139,7 @@ describe("ensureCursorRuleFile", () => {
   });
 
   it("preserves frontmatter the user has customized", async () => {
-    const filePath = path.join(dir, ".cursor", "rules", "ctx-memory.mdc");
+    const filePath = path.join(dir, ".cursor", "rules", "whyanchor.mdc");
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(
       filePath,
@@ -156,7 +156,7 @@ describe("ensureCursorRuleFile", () => {
 
   it("keeps frontmatter above the generated section when content is written into it", async () => {
     const filePath = await ensureCursorRuleFile(dir);
-    await upsertMarkedSection(filePath, "<!-- ctx-memory:start -->\nnotes here\n<!-- ctx-memory:end -->");
+    await upsertMarkedSection(filePath, "<!-- whyanchor:start -->\nnotes here\n<!-- whyanchor:end -->");
 
     const content = await readFile(filePath, "utf8");
     expect(content.startsWith("---")).toBe(true);
@@ -169,7 +169,7 @@ describe("hasLegacyRootClaudeFile", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-legacy-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-legacy-"));
   });
 
   afterEach(async () => {
@@ -188,7 +188,7 @@ describe("hasLegacyRootClaudeFile", () => {
   it("is true when a root CLAUDE.md carries our generated block", async () => {
     await writeFile(
       path.join(dir, "CLAUDE.md"),
-      "<!-- ctx-memory:start -->\n## Project Memory\n<!-- ctx-memory:end -->\n",
+      "<!-- whyanchor:start -->\n## Project Memory\n<!-- whyanchor:end -->\n",
       "utf8"
     );
     expect(await hasLegacyRootClaudeFile(dir)).toBe(true);
@@ -199,7 +199,7 @@ describe("writeUsageInstructions", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-usage-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-usage-"));
   });
 
   afterEach(async () => {
@@ -209,7 +209,7 @@ describe("writeUsageInstructions", () => {
   it("inserts above an existing generated memory block, preserving hand-written content", async () => {
     await writeFile(
       path.join(dir, "CLAUDE.md"),
-      "# My Project\n\nHand-written rules.\n\n<!-- ctx-memory:start -->\n## Project Memory\n<!-- ctx-memory:end -->\n",
+      "# My Project\n\nHand-written rules.\n\n<!-- whyanchor:start -->\n## Project Memory\n<!-- whyanchor:end -->\n",
       "utf8"
     );
 
@@ -218,13 +218,13 @@ describe("writeUsageInstructions", () => {
 
     expect(content).toContain("Hand-written rules.");
     expect(content).toContain("## Project Memory");
-    expect(content.indexOf("ctx-memory:usage:start")).toBeLessThan(content.indexOf("ctx-memory:start"));
+    expect(content.indexOf("whyanchor:usage:start")).toBeLessThan(content.indexOf("whyanchor:start"));
   });
 
   it("is idempotent — re-running does not duplicate the section", async () => {
     await writeUsageInstructions(dir, "CLAUDE.md");
     await writeUsageInstructions(dir, "CLAUDE.md");
     const content = await readFile(path.join(dir, "CLAUDE.md"), "utf8");
-    expect(content.match(/ctx-memory:usage:start/g)?.length).toBe(1);
+    expect(content.match(/whyanchor:usage:start/g)?.length).toBe(1);
   });
 });

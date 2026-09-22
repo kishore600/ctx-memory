@@ -10,7 +10,7 @@ export async function runList(cwd: string, opts: ListOptions): Promise<void> {
   const repoRoot = (await getRepoRoot(cwd)) ?? cwd;
 
   if (!(await storeExists(repoRoot))) {
-    console.error("✖ No memory store found. Run `memory init` first.");
+    console.error("✖ No memory store found. Run `whyanchor init` first.");
     process.exitCode = 1;
     return;
   }
@@ -26,7 +26,7 @@ export async function runList(cwd: string, opts: ListOptions): Promise<void> {
   }
 
   if (entries.length === 0) {
-    console.log("No memory entries yet. Run `memory capture` to add one.");
+    console.log("No memory entries yet. Run `whyanchor capture` to add one.");
     return;
   }
 

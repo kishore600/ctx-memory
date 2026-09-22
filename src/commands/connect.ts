@@ -23,7 +23,7 @@ export interface ConnectOptions {
 const ALL_AGENTS: Agent[] = ["claude", "cursor", "codex"];
 
 function resolveCliPath(): string {
-  // The absolute path of the CLI that is running right now — works whether ctx-memory was
+  // The absolute path of the CLI that is running right now — works whether whyanchor was
   // globally linked, cloned from source, or referenced by path from another repo.
   return path.resolve(fileURLToPath(new URL("../cli.js", import.meta.url)));
 }
@@ -46,7 +46,7 @@ function parseCommand(input: string): ServerCommand {
 
 export async function runConnect(cwd: string, opts: ConnectOptions): Promise<void> {
   if (!(await isGitRepo(cwd))) {
-    console.error("✖ Not a git repository. ctx-memory is git-backed — run `git init` first.");
+    console.error("✖ Not a git repository. whyanchor is git-backed — run `git init` first.");
     process.exitCode = 1;
     return;
   }
@@ -54,7 +54,7 @@ export async function runConnect(cwd: string, opts: ConnectOptions): Promise<voi
   const repoRoot = (await getRepoRoot(cwd)) ?? cwd;
 
   if (!(await storeExists(repoRoot))) {
-    console.error("✖ No memory store found. Run `memory init` first.");
+    console.error("✖ No memory store found. Run `whyanchor init` first.");
     process.exitCode = 1;
     return;
   }

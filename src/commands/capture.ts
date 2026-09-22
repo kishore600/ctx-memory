@@ -23,7 +23,7 @@ export async function runCapture(cwd: string, opts: CaptureOptions): Promise<voi
   const repoRoot = (await getRepoRoot(cwd)) ?? cwd;
 
   if (!(await storeExists(repoRoot))) {
-    console.error("✖ No memory store found. Run `memory init` first.");
+    console.error("✖ No memory store found. Run `whyanchor init` first.");
     process.exitCode = 1;
     return;
   }
@@ -113,5 +113,5 @@ export async function runCapture(cwd: string, opts: CaptureOptions): Promise<voi
       console.warn(`⚠ Could not resolve ${missing.length} ref(s), captured anyway: ${missing.join(", ")}`);
     }
   }
-  console.log("Run `memory generate` to reflect this in CLAUDE.md / AGENTS.md.");
+  console.log("Run `whyanchor generate` to reflect this in CLAUDE.md / AGENTS.md.");
 }

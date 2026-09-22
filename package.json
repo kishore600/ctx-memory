@@ -1,11 +1,11 @@
 {
-  "name": "ctx-memory",
+  "name": "whyanchor",
   "version": "0.1.0",
   "description": "Local-first, git-backed memory layer for AI coding agents. Capture decisions, detect staleness, generate CLAUDE.md/AGENTS.md, and serve memory over MCP.",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "memory": "./dist/cli.js"
+    "whyanchor": "./dist/cli.js"
   },
   "files": [
     "dist"

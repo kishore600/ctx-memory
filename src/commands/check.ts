@@ -19,7 +19,7 @@ export async function runCheck(cwd: string, opts: CheckOptions): Promise<void> {
   const repoRoot = (await getRepoRoot(cwd)) ?? cwd;
 
   if (!(await storeExists(repoRoot))) {
-    console.error("✖ No memory store found. Run `memory init` first.");
+    console.error("✖ No memory store found. Run `whyanchor init` first.");
     process.exitCode = 1;
     return;
   }
@@ -62,7 +62,7 @@ export async function runCheck(cwd: string, opts: CheckOptions): Promise<void> {
 
 function printReport(results: EntryStaleness[]): void {
   if (results.length === 0) {
-    console.log("No memory entries to check. Run `memory capture` to add one.");
+    console.log("No memory entries to check. Run `whyanchor capture` to add one.");
     return;
   }
 

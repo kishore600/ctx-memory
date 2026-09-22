@@ -1,4 +1,4 @@
-# ctx-memory
+# whyanchor
 
 **Your AI coding agent forgets why your code is the way it is. This remembers for it.**
 
@@ -64,9 +64,9 @@ Three jobs, nothing more:
 
 | # | Job | How |
 | --- | --- | --- |
-| 1 | **Remember** a decision | One command (`memory capture`) writes it to a markdown file in your repo. Your agent can also write one itself, mid-conversation. |
+| 1 | **Remember** a decision | One command (`whyanchor capture`) writes it to a markdown file in your repo. Your agent can also write one itself, mid-conversation. |
 | 2 | **Deliver** it to the agent at the right time | Two ways: written into the files agents read at startup (`.claude/CLAUDE.md`, `AGENTS.md`, Cursor's rules file), and served live over MCP so the agent can ask "what do I need to know about *this* file?" |
-| 3 | **Keep it honest** | `memory check` compares each note against the code it points at. If the code moved on, the note gets flagged. |
+| 3 | **Keep it honest** | `whyanchor check` compares each note against the code it points at. If the code moved on, the note gets flagged. |
 
 Job 3 is the important one. Every "write down your decisions" system dies the same way: the notes
 rot, somebody gets burned by a wrong answer, and the team stops trusting the whole thing. A note
@@ -88,17 +88,17 @@ flowchart TB
         direction TB
         CODE["your source code<br/>src/pricing.ts"]
         MEM[".memory/entries/*.md<br/>one markdown file per decision"]
-        DOC[".claude/CLAUDE.md · AGENTS.md<br/>.cursor/rules/ctx-memory.mdc<br/>read by agents at startup"]
+        DOC[".claude/CLAUDE.md · AGENTS.md<br/>.cursor/rules/whyanchor.mdc<br/>read by agents at startup"]
     end
 
-    You -->|"1 · you run<br/>memory capture"| MEM
+    You -->|"1 · you run<br/>whyanchor capture"| MEM
     Agent -->|"1 · or the agent calls<br/>capture_memory"| MEM
 
-    MEM -->|"2 · memory generate"| DOC
+    MEM -->|"2 · whyanchor generate"| DOC
     DOC -->|"3 · agent reads<br/>this at startup"| Agent
     MEM -->|"3 · or asks live over MCP<br/>get_memory_for_file"| Agent
 
-    MEM --> CHECK{{"4 · memory check"}}
+    MEM --> CHECK{{"4 · whyanchor check"}}
     CODE -->|"compares git log<br/>+ content hash"| CHECK
     CHECK -->|"warns you when a note<br/>no longer matches the code"| You
 ```
@@ -121,15 +121,15 @@ Following the numbers:
 Requires **Node.js 18+** and **git**.
 
 ```bash
-git clone <this-repo> ctx-memory
-cd ctx-memory
+git clone <this-repo> whyanchor
+cd whyanchor
 npm install
 npm run build
-npm link      # makes the `memory` command available everywhere
+npm link      # makes the `whyanchor` command available everywhere
 ```
 
-`npm link` is optional. Without it, run the tool with `node /path/to/ctx-memory/dist/cli.js`
-instead of `memory`.
+`npm link` is optional. Without it, run the tool with `node /path/to/whyanchor/dist/cli.js`
+instead of `whyanchor`.
 
 ---
 
@@ -139,11 +139,11 @@ Go to any git repo you actually work in:
 
 ```bash
 cd ~/my-project
-memory init      # creates .memory/ to hold your notes
-memory connect   # wires the tool into Claude Code, Cursor, and Codex
+whyanchor init      # creates .memory/ to hold your notes
+whyanchor connect   # wires the tool into Claude Code, Cursor, and Codex
 ```
 
-That is the entire setup. `memory connect` writes the config files your agents need and adds a
+That is the entire setup. `whyanchor connect` writes the config files your agents need and adds a
 short instruction block to `.claude/CLAUDE.md` and `AGENTS.md` telling the agent when to use it. It
 **merges** into any config you already have — it never overwrites other MCP servers, and if it
 cannot understand a config file it stops rather than damaging it.
@@ -151,14 +151,14 @@ cannot understand a config file it stops rather than damaging it.
 Now save your first decision:
 
 ```bash
-memory capture \
+whyanchor capture \
   -t "Enterprise discount is 30% by contract, not a guess" \
   -m "Legal signed off on 30% in the 2026 MSA template. Do not change this for conversion experiments without contract review." \
   -r "src/pricing.ts#calculateDiscount" \
   --tags pricing,legal
 ```
 
-Or just run `memory capture` with no flags and it asks you the questions.
+Or just run `whyanchor capture` with no flags and it asks you the questions.
 
 The `-r` flag is the key part. It **anchors** the note to a specific function. That anchor is what
 makes staleness detection possible later.
@@ -166,7 +166,7 @@ makes staleness detection possible later.
 Finally, push it into the files your agents read at startup:
 
 ```bash
-memory generate
+whyanchor generate
 ```
 
 Now open that project in Claude Code, Cursor, or Codex. Ask it to change the discount. It will
@@ -174,13 +174,13 @@ already know why it is 30%.
 
 ### Which file does each agent read?
 
-`memory generate` writes three files, because the tools do not agree on one:
+`whyanchor generate` writes three files, because the tools do not agree on one:
 
 | File | Read by | Why this file |
 | --- | --- | --- |
 | `.claude/CLAUDE.md` | Claude Code | Claude Code reads a project CLAUDE.md from either the repo root or `.claude/`; this keeps the root clean |
 | `AGENTS.md` | **Codex**, Cursor, Copilot, Gemini CLI, Windsurf, Zed and others | The vendor-neutral standard, now stewarded under the Linux Foundation and used by 60k+ projects |
-| `.cursor/rules/ctx-memory.mdc` | Cursor | Cursor reads `AGENTS.md` too, but this is its *native* rules format, which supports per-file scoping |
+| `.cursor/rules/whyanchor.mdc` | Cursor | Cursor reads `AGENTS.md` too, but this is its *native* rules format, which supports per-file scoping |
 
 Two things worth knowing, because the naming trips people up:
 
@@ -190,15 +190,15 @@ Two things worth knowing, because the naming trips people up:
   the YAML frontmatter to know when to apply the rule.
 - **Don't keep a root `CLAUDE.md` as well.** Claude Code loads `./CLAUDE.md` *and*
   `./.claude/CLAUDE.md` when both exist, so a leftover root copy injects every note twice and
-  wastes context. `memory generate` warns you if it spots one.
+  wastes context. `whyanchor generate` warns you if it spots one.
 
 Generate just one if you prefer:
 
 ```bash
-memory generate --target claude   # only .claude/CLAUDE.md
-memory generate --target agents   # only AGENTS.md
-memory generate --target cursor   # only the Cursor rules file
-memory generate --target all      # all three (the default)
+whyanchor generate --target claude   # only .claude/CLAUDE.md
+whyanchor generate --target agents   # only AGENTS.md
+whyanchor generate --target cursor   # only the Cursor rules file
+whyanchor generate --target all      # all three (the default)
 ```
 
 ### Tuning the Cursor rule
@@ -207,7 +207,7 @@ The `.mdc` file is created with frontmatter that applies it to every request:
 
 ```yaml
 ---
-description: Project memory — decisions and the reasoning behind them, captured with ctx-memory
+description: Project memory — decisions and the reasoning behind them, captured with whyanchor
 alwaysApply: true
 ---
 ```
@@ -223,7 +223,7 @@ alwaysApply: false
 ---
 ```
 
-Your edits to the frontmatter are preserved. `memory generate` only rewrites the notes below it.
+Your edits to the frontmatter are preserved. `whyanchor generate` only rewrites the notes below it.
 
 ---
 
@@ -232,32 +232,32 @@ Your edits to the frontmatter are preserved. `memory generate` only rewrites the
 ```mermaid
 sequenceDiagram
     participant You
-    participant Tool as memory
+    participant Tool as whyanchor
     participant Repo as your repo
 
-    You->>Tool: memory capture (after a real decision)
+    You->>Tool: whyanchor capture (after a real decision)
     Tool->>Repo: writes .memory/entries/2026-09-21-....md
     Note over Repo: it is a normal file —<br/>review it in git diff, commit it like code
 
-    You->>Tool: memory generate
+    You->>Tool: whyanchor generate
     Tool->>Repo: updates .claude/CLAUDE.md, AGENTS.md,<br/>and the Cursor rules file
 
     Note over You,Repo: ...weeks pass, code changes...
 
-    You->>Tool: memory check
+    You->>Tool: whyanchor check
     Tool->>Repo: re-reads the anchored code + git history
     Tool-->>You: "[STALE] discount note — content changed since capture"
 
-    You->>Tool: memory capture --supersedes mem_a8AwCAoR
+    You->>Tool: whyanchor capture --supersedes mem_a8AwCAoR
     Note over Repo: old note marked superseded,<br/>new one takes over
 ```
 
 In plain words:
 
 1. **After finishing a task**, if you made a decision someone could undo by accident, run
-   `memory capture`. Takes about 20 seconds.
-2. **Run `memory generate`** so the note reaches agents at startup.
-3. **Run `memory check` before committing** (or wire it into a git hook, below) so you find out
+   `whyanchor capture`. Takes about 20 seconds.
+2. **Run `whyanchor generate`** so the note reaches agents at startup.
+3. **Run `whyanchor check` before committing** (or wire it into a git hook, below) so you find out
    when a note has gone stale.
 4. **When a note is wrong**, do not edit it in place — capture a new one with `--supersedes`. The
    old one stays in git history, so you can see how your thinking changed.
@@ -268,8 +268,8 @@ Put this in `.git/hooks/pre-commit` and make it executable:
 
 ```bash
 #!/bin/sh
-memory check --fail-on-stale || {
-  echo "Some memory notes look stale — run 'memory check' to see them."
+whyanchor check --fail-on-stale || {
+  echo "Some memory notes look stale — run 'whyanchor check' to see them."
   exit 1
 }
 ```
@@ -282,32 +282,32 @@ memory check --fail-on-stale || {
 
 | Command | What it does |
 | --- | --- |
-| `memory init` | Creates `.memory/` in the current git repo. Run once per project. |
-| `memory connect` | Registers the tool with Claude Code, Cursor and Codex, and writes agent instructions into `CLAUDE.md`/`AGENTS.md`. |
-| `memory capture` | Saves a new decision. Interactive, or scripted with flags. |
-| `memory generate` | Writes your notes into `.claude/CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/ctx-memory.mdc`. |
-| `memory check` | Compares every note against the current code. Reports what has gone stale. |
-| `memory list` | Shows all saved notes. |
-| `memory mcp` | Runs the MCP server. **Agents run this, not you.** |
+| `whyanchor init` | Creates `.memory/` in the current git repo. Run once per project. |
+| `whyanchor connect` | Registers the tool with Claude Code, Cursor and Codex, and writes agent instructions into `CLAUDE.md`/`AGENTS.md`. |
+| `whyanchor capture` | Saves a new decision. Interactive, or scripted with flags. |
+| `whyanchor generate` | Writes your notes into `.claude/CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/whyanchor.mdc`. |
+| `whyanchor check` | Compares every note against the current code. Reports what has gone stale. |
+| `whyanchor list` | Shows all saved notes. |
+| `whyanchor mcp` | Runs the MCP server. **Agents run this, not you.** |
 
 Useful flags:
 
 ```bash
-memory capture --supersedes mem_ab12cd34   # replace an outdated note
-memory check --fail-on-stale               # exit 1 if stale (for CI / git hooks)
-memory check --json                        # machine-readable output
-memory check --write                       # save the check result into the note files
-memory generate --target cursor            # only one target: claude | agents | cursor | all
-memory list --tag pricing                  # filter by tag
-memory connect --agent claude,cursor       # only wire up some agents
-memory connect --command "memory mcp"      # override how the server is launched
+whyanchor capture --supersedes mem_ab12cd34   # replace an outdated note
+whyanchor check --fail-on-stale               # exit 1 if stale (for CI / git hooks)
+whyanchor check --json                        # machine-readable output
+whyanchor check --write                       # save the check result into the note files
+whyanchor generate --target cursor            # only one target: claude | agents | cursor | all
+whyanchor list --tag pricing                  # filter by tag
+whyanchor connect --agent claude,cursor       # only wire up some agents
+whyanchor connect --command "whyanchor mcp"   # override how the server is launched
 ```
 
 ---
 
 ## How AI agents use it
 
-`memory connect` sets this up for you. Here is what it actually configures.
+`whyanchor connect` sets this up for you. Here is what it actually configures.
 
 **The config files it writes:**
 
@@ -332,7 +332,7 @@ memory connect --command "memory mcp"      # override how the server is launched
 Registering the tools only makes them **available**. It does not make an agent **use** them. An
 agent will not think to check your notes unless something tells it to.
 
-That is why `memory connect` also writes a short instruction block into `CLAUDE.md`/`AGENTS.md`:
+That is why `whyanchor connect` also writes a short instruction block into `CLAUDE.md`/`AGENTS.md`:
 
 > - **Before editing a file**, call `get_memory_for_file` with its path.
 > - **Before a non-obvious choice**, call `search_memory` first.
@@ -353,7 +353,7 @@ you approve code. Nothing enters your project's history without you looking at i
 This is the part that other note-taking approaches do not do.
 
 When you save a note, the tool records a **fingerprint**: a hash of the exact function or file you
-anchored to, plus the current git commit. Later, `memory check` recomputes that fingerprint and
+anchored to, plus the current git commit. Later, `whyanchor check` recomputes that fingerprint and
 compares.
 
 ```mermaid
@@ -372,7 +372,7 @@ someone edits a different function in the same file, a naive tool flags your not
 ignore the warnings. Anchoring to `src/pricing.ts#calculateDiscount` means you are only alerted
 when **that function** actually changed.
 
-Real example from this repo: a refactor split one function into two. `memory check` flagged the
+Real example from this repo: a refactor split one function into two. `whyanchor check` flagged the
 note pointing at the old one, the note got superseded with a corrected anchor, and the
 documentation stayed true. That is the loop working.
 
@@ -425,7 +425,7 @@ Five concrete design choices:
    live over MCP for agents that have it. You are not locked to one delivery method.
 4. **Plain markdown, one file per note.** Open them in any editor. `git diff`, `git blame` and
    merges all work normally. If you delete this tool tomorrow, your notes are still readable.
-5. **One command to set up across three agents.** `memory connect` handles the config *and* the
+5. **One command to set up across three agents.** `whyanchor connect` handles the config *and* the
    instructions that make an agent actually use it.
 
 ### An honest note
@@ -509,7 +509,7 @@ conversion experiments without contract review.
 | `status` | `active`, `stale`, or `superseded` |
 | `commit` | The commit you were on when you wrote it — the baseline for checks |
 | `fingerprint` | Hash of the anchored code at the time of writing |
-| `last_checked` | When `memory check --write` last looked at it |
+| `last_checked` | When `whyanchor check --write` last looked at it |
 
 **Anchoring supports two shapes:**
 
@@ -525,7 +525,7 @@ whole file rather than failing.
 ## Project layout
 
 ```
-ctx-memory/
+whyanchor/
 ├── src/
 │   ├── cli.ts                    # command-line entry point
 │   ├── commands/                 # one file per command
@@ -550,7 +550,7 @@ ctx-memory/
 ├── .memory/entries/              # this project's own notes about itself
 ├── .claude/CLAUDE.md             # generated — agent instructions + notes
 ├── AGENTS.md                     # generated — same, for Codex/Cursor/Copilot/…
-├── .cursor/rules/ctx-memory.mdc  # generated — same notes, Cursor's native format
+├── .cursor/rules/whyanchor.mdc   # generated — same notes, Cursor's native format
 ├── .mcp.json                     # generated — Claude Code config
 ├── .cursor/mcp.json              # generated — Cursor config
 └── .codex/config.toml            # generated — Codex config

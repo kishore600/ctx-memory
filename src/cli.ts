@@ -10,7 +10,7 @@ import { startMcpServer } from "./mcp/server.js";
 
 const program = new Command();
 
-program.name("memory").description("Local-first, git-backed memory layer for AI coding agents.").version("0.1.0");
+program.name("whyanchor").description("Local-first, git-backed memory layer for AI coding agents.").version("0.1.0");
 
 program
   .command("init")
@@ -23,7 +23,7 @@ program
   .command("connect")
   .description("Register the MCP server with your AI agents and write agent usage instructions")
   .option("--agent <agents>", "claude | cursor | codex | all (comma-separated)", "all")
-  .option("--command <command>", 'Override the spawn command, e.g. "memory mcp"')
+  .option("--command <command>", 'Override the spawn command, e.g. "whyanchor mcp"')
   .option("--no-instructions", "Skip writing the usage section into CLAUDE.md / AGENTS.md")
   .action(async (options) => {
     await runConnect(process.cwd(), {

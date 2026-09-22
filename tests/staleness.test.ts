@@ -19,7 +19,7 @@ describe("staleness check (integration, real git repo)", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-stale-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-stale-"));
     await git(dir, ["init"]);
     await git(dir, ["config", "user.email", "test@example.com"]);
     await git(dir, ["config", "user.name", "Test"]);

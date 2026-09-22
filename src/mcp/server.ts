@@ -20,7 +20,7 @@ function textResult(data: unknown) {
 export async function startMcpServer(cwd: string): Promise<void> {
   const repoRoot = (await getRepoRoot(cwd)) ?? cwd;
 
-  const server = new McpServer({ name: "ctx-memory", version: "0.1.0" });
+  const server = new McpServer({ name: "whyanchor", version: "0.1.0" });
 
   server.tool(
     "search_memory",

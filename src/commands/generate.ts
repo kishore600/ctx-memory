@@ -30,7 +30,7 @@ export async function runGenerate(cwd: string, opts: GenerateOptions): Promise<v
   const repoRoot = (await getRepoRoot(cwd)) ?? cwd;
 
   if (!(await storeExists(repoRoot))) {
-    console.error("✖ No memory store found. Run `memory init` first.");
+    console.error("✖ No memory store found. Run `whyanchor init` first.");
     process.exitCode = 1;
     return;
   }

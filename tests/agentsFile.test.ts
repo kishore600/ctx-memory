@@ -30,8 +30,8 @@ describe("renderMemorySection", () => {
   it("renders a placeholder when there are no entries", () => {
     const section = renderMemorySection([]);
     expect(section).toContain("No memory entries yet");
-    expect(section).toContain("<!-- ctx-memory:start -->");
-    expect(section).toContain("<!-- ctx-memory:end -->");
+    expect(section).toContain("<!-- whyanchor:start -->");
+    expect(section).toContain("<!-- whyanchor:end -->");
   });
 
   it("groups entries by tag and includes title/refs", () => {
@@ -52,7 +52,7 @@ describe("upsertMemorySection", () => {
   let filePath: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "ctx-memory-test-"));
+    dir = await mkdtemp(path.join(tmpdir(), "whyanchor-test-"));
     filePath = path.join(dir, "CLAUDE.md");
   });
 
@@ -61,7 +61,7 @@ describe("upsertMemorySection", () => {
   });
 
   it("creates the file when it does not exist", async () => {
-    const result = await upsertMemorySection(filePath, "<!-- ctx-memory:start -->\nhi\n<!-- ctx-memory:end -->");
+    const result = await upsertMemorySection(filePath, "<!-- whyanchor:start -->\nhi\n<!-- whyanchor:end -->");
     expect(result).toBe("created");
     const content = await readFile(filePath, "utf8");
     expect(content).toContain("hi");
@@ -69,7 +69,7 @@ describe("upsertMemorySection", () => {
 
   it("appends a marked section to an existing file without markers", async () => {
     await writeFile(filePath, "# My existing instructions\n\nDo the thing.\n", "utf8");
-    const result = await upsertMemorySection(filePath, "<!-- ctx-memory:start -->\nnew section\n<!-- ctx-memory:end -->");
+    const result = await upsertMemorySection(filePath, "<!-- whyanchor:start -->\nnew section\n<!-- whyanchor:end -->");
     expect(result).toBe("updated");
     const content = await readFile(filePath, "utf8");
     expect(content).toContain("My existing instructions");
@@ -79,10 +79,10 @@ describe("upsertMemorySection", () => {
   it("replaces only the content between existing markers, preserving the rest", async () => {
     await writeFile(
       filePath,
-      "# Header\n\n<!-- ctx-memory:start -->\nold section\n<!-- ctx-memory:end -->\n\n# Footer\n",
+      "# Header\n\n<!-- whyanchor:start -->\nold section\n<!-- whyanchor:end -->\n\n# Footer\n",
       "utf8"
     );
-    await upsertMemorySection(filePath, "<!-- ctx-memory:start -->\nnew section\n<!-- ctx-memory:end -->");
+    await upsertMemorySection(filePath, "<!-- whyanchor:start -->\nnew section\n<!-- whyanchor:end -->");
     const content = await readFile(filePath, "utf8");
     expect(content).toContain("# Header");
     expect(content).toContain("# Footer");
@@ -91,26 +91,26 @@ describe("upsertMemorySection", () => {
   });
 
   it("ignores marker-like text inline in a body line and still finds the real end marker", async () => {
-    // Regression: an entry whose body literally mentions "<!-- ctx-memory:end -->" (e.g. one
+    // Regression: an entry whose body literally mentions "<!-- whyanchor:end -->" (e.g. one
     // documenting the marker scheme itself) must not be mistaken for the real closing marker.
     await writeFile(
       filePath,
       [
         "# Header",
-        "<!-- ctx-memory:start -->",
-        "- explains the marker: text between <!-- ctx-memory:start --> and <!-- ctx-memory:end -->, ignored",
-        "<!-- ctx-memory:end -->",
+        "<!-- whyanchor:start -->",
+        "- explains the marker: text between <!-- whyanchor:start --> and <!-- whyanchor:end -->, ignored",
+        "<!-- whyanchor:end -->",
         "# Footer",
         "",
       ].join("\n"),
       "utf8"
     );
-    await upsertMemorySection(filePath, "<!-- ctx-memory:start -->\nnew section\n<!-- ctx-memory:end -->");
+    await upsertMemorySection(filePath, "<!-- whyanchor:start -->\nnew section\n<!-- whyanchor:end -->");
     const content = await readFile(filePath, "utf8");
     expect(content).toContain("# Header");
     expect(content).toContain("# Footer");
     expect(content).toContain("new section");
     expect(content).not.toContain("explains the marker");
-    expect(content.match(/<!-- ctx-memory:end -->/g)?.length).toBe(1);
+    expect(content.match(/<!-- whyanchor:end -->/g)?.length).toBe(1);
   });
 });

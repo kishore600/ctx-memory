@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "ctx-memory": {
+    "whyanchor": {
       "command": "npx",
       "args": ["tsx", "src/cli.ts", "mcp"]
     }
