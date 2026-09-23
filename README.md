@@ -192,16 +192,6 @@ toy example — this is what it looks like day to day:
 √ Tags (comma-separated, optional): ... auth,routes
 ```
 
-Prefer to skip the prompts entirely — a script, a git hook, capturing from CI? Every answer above
-has a matching flag, so the whole thing can be one line:
-
-```bash
-whyanchor capture -t "..." -m "..." -r "src/features/auth/auth.router.ts" --tags auth,routes
-```
-
-Any flag you provide is skipped in the prompt; leave one out and `capture` still asks for just
-that one.
-
 Finally, push it into the files your agents read at startup:
 
 ```bash
