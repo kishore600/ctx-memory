@@ -182,15 +182,21 @@ whyanchor capture
 The third question — **anchoring** the note to `src/pricing.ts#calculateDiscount` — is the part
 that matters most. That anchor is what makes staleness detection possible later.
 
-Writing a script, a git hook, or capturing from CI instead of a terminal? Skip the prompts by
-passing the same answers as flags:
+Same flow, a second time, anchored to a real file in a feature folder rather than the pricing
+toy example — this is what it looks like day to day:
+
+```
+√ One-line title for this memory: ... Auth routes require a signed session cookie, not a bearer token
+√ What should future you (or another dev) know? (a few sentences) ... We standardized on cookie-based sessions for browser routes; bearer tokens are reserved for the mobile client. Do not add Authorization-header parsing here without checking with the mobile team first.
+√ Files/symbols this is anchored to (comma-separated, e.g. src/billing.ts#calculateTax): ... src/features/auth/auth.router.ts
+√ Tags (comma-separated, optional): ... auth,routes
+```
+
+Prefer to skip the prompts entirely — a script, a git hook, capturing from CI? Every answer above
+has a matching flag, so the whole thing can be one line:
 
 ```bash
-whyanchor capture \
-  -t "Enterprise discount is 30% by contract, not a guess" \
-  -m "Legal signed off on 30% in the 2026 MSA template. Do not change this for conversion experiments without contract review." \
-  -r "src/pricing.ts#calculateDiscount" \
-  --tags pricing,legal
+whyanchor capture -t "..." -m "..." -r "src/features/auth/auth.router.ts" --tags auth,routes
 ```
 
 Any flag you provide is skipped in the prompt; leave one out and `capture` still asks for just
