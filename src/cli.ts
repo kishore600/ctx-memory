@@ -7,10 +7,14 @@ import { runGenerate } from "./commands/generate.js";
 import { runInit } from "./commands/init.js";
 import { runList } from "./commands/list.js";
 import { startMcpServer } from "./mcp/server.js";
+import { getVersion } from "./core/version.js";
 
 const program = new Command();
 
-program.name("whyanchor").description("Local-first, git-backed memory layer for AI coding agents.").version("0.1.0");
+program
+  .name("whyanchor")
+  .description("Local-first, git-backed memory layer for AI coding agents.")
+  .version(getVersion());
 
 program
   .command("init")

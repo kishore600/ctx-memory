@@ -6,6 +6,7 @@ import { getCurrentCommit, getGitAuthor, getRepoRoot } from "../core/git.js";
 import { checkEntries } from "../core/staleness.js";
 import { listEntries, writeEntry } from "../core/store.js";
 import type { MemoryEntry } from "../core/schema.js";
+import { getVersion } from "../core/version.js";
 
 function summarize(entry: MemoryEntry): Record<string, unknown> {
   const { id, title, date, author, tags, refs, status } = entry.frontmatter;
@@ -20,7 +21,7 @@ function textResult(data: unknown) {
 export async function startMcpServer(cwd: string): Promise<void> {
   const repoRoot = (await getRepoRoot(cwd)) ?? cwd;
 
-  const server = new McpServer({ name: "whyanchor", version: "0.1.0" });
+  const server = new McpServer({ name: "whyanchor", version: getVersion() });
 
   server.tool(
     "search_memory",
