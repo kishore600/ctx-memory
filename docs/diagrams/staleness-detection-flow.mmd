@@ -1,0 +1,8 @@
+flowchart TD
+    A["check each anchored ref"] --> B{"does the file/function<br/>still exist?"}
+    B -- "no" --> MISSING["[missing]<br/>the code was renamed or deleted"]
+    B -- "yes" --> C{"is the content<br/>identical to before?"}
+    C -- "no" --> HIGH["[STALE]<br/>the code changed — check this note"]
+    C -- "yes" --> D{"did any commit<br/>touch this file?"}
+    D -- "yes" --> LOW["[low]<br/>file changed, but your function didn't —<br/>probably still fine"]
+    D -- "no" --> FRESH["[ok]<br/>nothing has moved"]

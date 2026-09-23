@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant You
+    participant Connect as whyanchor connect
+    participant Cfg as .mcp.json / .cursor/mcp.json /<br/>.codex/config.toml
+    participant Agent as Claude Code / Cursor / Codex
+    participant Server as whyanchor mcp<br/>(spawned by the agent)
+
+    You->>Connect: whyanchor connect
+    Connect->>Cfg: register the spawn command<br/>for the whyanchor server
+    Connect->>Agent: write the "when to use this"<br/>instructions into CLAUDE.md / AGENTS.md
+
+    Note over You,Agent: you reopen the project
+
+    Agent->>Server: spawns whyanchor mcp over stdio
+    Server-->>Agent: lists its 5 tools
+
+    loop during the conversation
+        Agent->>Server: e.g. get_memory_for_file("src/pricing.ts")
+        Server-->>Agent: matching notes, or none
+    end

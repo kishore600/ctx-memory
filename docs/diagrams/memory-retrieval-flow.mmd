@@ -1,0 +1,14 @@
+flowchart TD
+    Store[(".memory/entries/*.md")]
+
+    Store --> List["whyanchor list<br/>— every note, optionally --tag filtered"]
+    Store --> Check["whyanchor check<br/>— every note, plus a staleness verdict"]
+    Store --> GMFF["agent: get_memory_for_file<br/>— notes anchored to one file"]
+    Store --> Search["agent: search_memory<br/>— keyword/tag search over titles + bodies"]
+    Store --> GME["agent: get_memory_entry<br/>— one full note, by id"]
+
+    List --> You(["you, in the terminal"])
+    Check --> You
+    GMFF --> AgentOut(["the agent, mid-conversation"])
+    Search --> AgentOut
+    GME --> AgentOut

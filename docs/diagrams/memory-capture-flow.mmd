@@ -1,0 +1,14 @@
+sequenceDiagram
+    participant You as You / Agent
+    participant CLI as whyanchor capture
+    participant Git as git
+    participant Store as .memory/entries/
+
+    You->>CLI: title + message<br/>(typed at the prompts, or -t/-m flags)
+    CLI->>Git: read author (git config user.email)<br/>and the current commit
+    CLI->>CLI: fingerprint each anchored ref —<br/>hash the function or file (core/fingerprint.ts)
+    CLI->>Store: write mem_xxxxxxxx.md<br/>(frontmatter + your note, plain markdown)
+    opt --supersedes was passed
+        CLI->>Store: mark the prior note's status: superseded
+    end
+    Store-->>You: "✔ Captured ... → .memory/entries/....md"

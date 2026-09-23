@@ -1,0 +1,13 @@
+flowchart LR
+    Start(["whyanchor init + connect<br/>— once per project"]) --> Work["build the feature,<br/>same as always"]
+    Work --> Decide{"made a call someone<br/>could undo by accident?"}
+    Decide -- "no" --> Work
+    Decide -- "yes" --> Capture["whyanchor capture<br/>(or the agent calls capture_memory)"]
+    Capture --> Generate["whyanchor generate"]
+    Generate --> Work
+    Work --> Commit{"about to commit?"}
+    Commit -- "not yet" --> Work
+    Commit -- "yes" --> Check["whyanchor check"]
+    Check -- "all clean" --> Done(["commit"])
+    Check -- "[STALE] flagged" --> Supersede["whyanchor capture --supersedes id"]
+    Supersede --> Generate

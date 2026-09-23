@@ -1,0 +1,21 @@
+flowchart TB
+    You(["You"])
+    Agent(["AI agent<br/>Claude Code · Cursor · Codex"])
+
+    subgraph repo["Your git repo — the single source of truth"]
+        direction TB
+        CODE["your source code<br/>src/pricing.ts"]
+        MEM[".memory/entries/*.md<br/>one markdown file per decision"]
+        DOC[".claude/CLAUDE.md · AGENTS.md<br/>.cursor/rules/whyanchor.mdc<br/>read by agents at startup"]
+    end
+
+    You -->|"1 · you run<br/>whyanchor capture"| MEM
+    Agent -->|"1 · or the agent calls<br/>capture_memory"| MEM
+
+    MEM -->|"2 · whyanchor generate"| DOC
+    DOC -->|"3 · agent reads<br/>this at startup"| Agent
+    MEM -->|"3 · or asks live over MCP<br/>get_memory_for_file"| Agent
+
+    MEM --> CHECK{{"4 · whyanchor check"}}
+    CODE -->|"compares git log<br/>+ content hash"| CHECK
+    CHECK -->|"warns you when a note<br/>no longer matches the code"| You

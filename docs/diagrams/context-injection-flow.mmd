@@ -1,0 +1,9 @@
+flowchart TD
+    Entries[".memory/entries/*.md<br/>every active note"] --> Group["group by tag"]
+    Group --> Render["render to markdown<br/>(agentsFile.ts#renderMemorySection)"]
+    Render --> Claude["upsert between<br/>&lt;!-- whyanchor:start/end --&gt;<br/>in .claude/CLAUDE.md"]
+    Render --> Agents["same markers,<br/>in AGENTS.md"]
+    Render --> Cursor["same notes, Cursor's own format,<br/>in .cursor/rules/whyanchor.mdc"]
+    Claude --> P1(["everything outside<br/>the markers is untouched"])
+    Agents --> P2(["same guarantee"])
+    Cursor --> P3(["your globs / alwaysApply<br/>edits above the marker survive too"])

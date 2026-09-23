@@ -81,29 +81,9 @@ Everything is files in your git repo. There is no database and no server. This i
 picture — [the day-to-day workflow](#the-day-to-day-workflow) below zooms into each arrow one at a
 time.
 
-```mermaid
-flowchart TB
-    You(["You"])
-    Agent(["AI agent<br/>Claude Code · Cursor · Codex"])
+![End-to-end architecture: you and your agent both write to .memory/entries, whyanchor generate rolls it into CLAUDE.md/AGENTS.md/Cursor rules, and whyanchor check compares notes against git history](docs/diagrams/architecture.svg)
 
-    subgraph repo["Your git repo — the single source of truth"]
-        direction TB
-        CODE["your source code<br/>src/pricing.ts"]
-        MEM[".memory/entries/*.md<br/>one markdown file per decision"]
-        DOC[".claude/CLAUDE.md · AGENTS.md<br/>.cursor/rules/whyanchor.mdc<br/>read by agents at startup"]
-    end
-
-    You -->|"1 · you run<br/>whyanchor capture"| MEM
-    Agent -->|"1 · or the agent calls<br/>capture_memory"| MEM
-
-    MEM -->|"2 · whyanchor generate"| DOC
-    DOC -->|"3 · agent reads<br/>this at startup"| Agent
-    MEM -->|"3 · or asks live over MCP<br/>get_memory_for_file"| Agent
-
-    MEM --> CHECK{{"4 · whyanchor check"}}
-    CODE -->|"compares git log<br/>+ content hash"| CHECK
-    CHECK -->|"warns you when a note<br/>no longer matches the code"| You
-```
+<sub>[Diagram source](docs/diagrams/architecture.mmd)</sub>
 
 Following the numbers:
 
@@ -274,42 +254,17 @@ how an agent finds it during a conversation.
 
 ### Developer workflow flow
 
-```mermaid
-flowchart LR
-    Start(["whyanchor init + connect<br/>— once per project"]) --> Work["build the feature,<br/>same as always"]
-    Work --> Decide{"made a call someone<br/>could undo by accident?"}
-    Decide -- "no" --> Work
-    Decide -- "yes" --> Capture["whyanchor capture<br/>(or the agent calls capture_memory)"]
-    Capture --> Generate["whyanchor generate"]
-    Generate --> Work
-    Work --> Commit{"about to commit?"}
-    Commit -- "not yet" --> Work
-    Commit -- "yes" --> Check["whyanchor check"]
-    Check -- "all clean" --> Done(["commit"])
-    Check -- "[STALE] flagged" --> Supersede["whyanchor capture --supersedes id"]
-    Supersede --> Generate
-```
+![Developer workflow flow: capture a decision, generate, check before committing, supersede if a note goes stale](docs/diagrams/developer-workflow-flow.svg)
+
+<sub>[Diagram source](docs/diagrams/developer-workflow-flow.mmd)</sub>
 
 ### Memory capture flow
 
 What actually happens inside `whyanchor capture`, whether you answer the prompts or pass flags:
 
-```mermaid
-sequenceDiagram
-    participant You as You / Agent
-    participant CLI as whyanchor capture
-    participant Git as git
-    participant Store as .memory/entries/
+![Memory capture flow: whyanchor capture reads git author and commit, fingerprints each anchored ref, and writes a markdown file to .memory/entries](docs/diagrams/memory-capture-flow.svg)
 
-    You->>CLI: title + message<br/>(typed at the prompts, or -t/-m flags)
-    CLI->>Git: read author (git config user.email)<br/>and the current commit
-    CLI->>CLI: fingerprint each anchored ref —<br/>hash the function or file (core/fingerprint.ts)
-    CLI->>Store: write mem_xxxxxxxx.md<br/>(frontmatter + your note, plain markdown)
-    opt --supersedes was passed
-        CLI->>Store: mark the prior note's status: superseded
-    end
-    Store-->>You: "✔ Captured ... → .memory/entries/....md"
-```
+<sub>[Diagram source](docs/diagrams/memory-capture-flow.mmd)</sub>
 
 Nothing here touches git itself — the file is written and left staged-or-not, exactly like any
 other change you made by hand. You review and commit it the same way.
@@ -319,17 +274,9 @@ other change you made by hand. You review and commit it the same way.
 What `whyanchor generate` does to get a note in front of an agent that has no MCP support (or
 before it has even started a session):
 
-```mermaid
-flowchart TD
-    Entries[".memory/entries/*.md<br/>every active note"] --> Group["group by tag"]
-    Group --> Render["render to markdown<br/>(agentsFile.ts#renderMemorySection)"]
-    Render --> Claude["upsert between<br/>&lt;!-- whyanchor:start/end --&gt;<br/>in .claude/CLAUDE.md"]
-    Render --> Agents["same markers,<br/>in AGENTS.md"]
-    Render --> Cursor["same notes, Cursor's own format,<br/>in .cursor/rules/whyanchor.mdc"]
-    Claude --> P1(["everything outside<br/>the markers is untouched"])
-    Agents --> P2(["same guarantee"])
-    Cursor --> P3(["your globs / alwaysApply<br/>edits above the marker survive too"])
-```
+![Context injection flow: whyanchor generate groups notes by tag and upserts them between markers in CLAUDE.md, AGENTS.md, and the Cursor rules file](docs/diagrams/context-injection-flow.svg)
+
+<sub>[Diagram source](docs/diagrams/context-injection-flow.mmd)</sub>
 
 The replacement is marker-scoped and line-exact, not a full-file rewrite — so a hand-written note
 above the block, or a note whose own body happens to contain marker-like text, cannot corrupt the
@@ -339,28 +286,9 @@ file.
 
 What `whyanchor connect` sets up, and what happens live once the agent is running:
 
-```mermaid
-sequenceDiagram
-    participant You
-    participant Connect as whyanchor connect
-    participant Cfg as .mcp.json / .cursor/mcp.json /<br/>.codex/config.toml
-    participant Agent as Claude Code / Cursor / Codex
-    participant Server as whyanchor mcp<br/>(spawned by the agent)
+![MCP integration flow: whyanchor connect registers the server and usage instructions, then the agent spawns whyanchor mcp and calls its tools during a conversation](docs/diagrams/mcp-integration-flow.svg)
 
-    You->>Connect: whyanchor connect
-    Connect->>Cfg: register the spawn command<br/>for the whyanchor server
-    Connect->>Agent: write the "when to use this"<br/>instructions into CLAUDE.md / AGENTS.md
-
-    Note over You,Agent: you reopen the project
-
-    Agent->>Server: spawns whyanchor mcp over stdio
-    Server-->>Agent: lists its 5 tools
-
-    loop during the conversation
-        Agent->>Server: e.g. get_memory_for_file("src/pricing.ts")
-        Server-->>Agent: matching notes, or none
-    end
-```
+<sub>[Diagram source](docs/diagrams/mcp-integration-flow.mmd)</sub>
 
 If you installed with `npm install -g`, the command `connect` registers is stable. If you're
 running the tool via bare `npx whyanchor`, pass `--command "npx -y whyanchor mcp"` explicitly when
@@ -371,22 +299,9 @@ temporary path can stop resolving later.
 
 Five different ways a note comes back out of `.memory/entries/`, depending on who's asking:
 
-```mermaid
-flowchart TD
-    Store[(".memory/entries/*.md")]
+![Memory retrieval flow: five ways a note comes back out of .memory/entries, via whyanchor list, whyanchor check, or the agent's MCP tools](docs/diagrams/memory-retrieval-flow.svg)
 
-    Store --> List["whyanchor list<br/>— every note, optionally --tag filtered"]
-    Store --> Check["whyanchor check<br/>— every note, plus a staleness verdict"]
-    Store --> GMFF["agent: get_memory_for_file<br/>— notes anchored to one file"]
-    Store --> Search["agent: search_memory<br/>— keyword/tag search over titles + bodies"]
-    Store --> GME["agent: get_memory_entry<br/>— one full note, by id"]
-
-    List --> You(["you, in the terminal"])
-    Check --> You
-    GMFF --> AgentOut(["the agent, mid-conversation"])
-    Search --> AgentOut
-    GME --> AgentOut
-```
+<sub>[Diagram source](docs/diagrams/memory-retrieval-flow.mmd)</sub>
 
 ### Run the check automatically
 
@@ -482,16 +397,9 @@ When you save a note, the tool records a **fingerprint**: a hash of the exact fu
 anchored to, plus the current git commit. Later, `whyanchor check` recomputes that fingerprint and
 compares.
 
-```mermaid
-flowchart TD
-    A["check each anchored ref"] --> B{"does the file/function<br/>still exist?"}
-    B -- "no" --> MISSING["[missing]<br/>the code was renamed or deleted"]
-    B -- "yes" --> C{"is the content<br/>identical to before?"}
-    C -- "no" --> HIGH["[STALE]<br/>the code changed — check this note"]
-    C -- "yes" --> D{"did any commit<br/>touch this file?"}
-    D -- "yes" --> LOW["[low]<br/>file changed, but your function didn't —<br/>probably still fine"]
-    D -- "no" --> FRESH["[ok]<br/>nothing has moved"]
-```
+![Staleness detection flow: the four-level check, from missing refs to a fresh fingerprint match](docs/diagrams/staleness-detection-flow.svg)
+
+<sub>[Diagram source](docs/diagrams/staleness-detection-flow.mmd)</sub>
 
 Why four levels instead of just "stale / not stale"? Because a file-level check cries wolf. If
 someone edits a different function in the same file, a naive tool flags your note and you learn to
