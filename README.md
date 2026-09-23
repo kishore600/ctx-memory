@@ -77,7 +77,9 @@ that gets abandoned in month two.
 
 ## Architecture
 
-Everything is files in your git repo. There is no database and no server.
+Everything is files in your git repo. There is no database and no server. This is the end-to-end
+picture — [the day-to-day workflow](#the-day-to-day-workflow) below zooms into each arrow one at a
+time.
 
 ```mermaid
 flowchart TB
@@ -118,18 +120,23 @@ Following the numbers:
 
 ## Install
 
-Requires **Node.js 18+** and **git**.
+Requires **Node.js 18+** and **git**. whyanchor is published on npm — there is nothing to clone
+or build.
 
 ```bash
-git clone <this-repo> whyanchor
-cd whyanchor
-npm install
-npm run build
-npm link      # makes the `whyanchor` command available everywhere
+npx whyanchor init
 ```
 
-`npm link` is optional. Without it, run the tool with `node /path/to/whyanchor/dist/cli.js`
-instead of `whyanchor`.
+Run that inside a git repo you actually work in. `npx` fetches the tool on first use, so this
+works with zero setup. If you'd rather have `whyanchor` on your PATH permanently:
+
+```bash
+npm install -g whyanchor
+whyanchor init
+```
+
+Every example in this README is written as `whyanchor <command>`. If you skipped the global
+install, prefix each one with `npx `.
 
 ---
 
@@ -148,7 +155,35 @@ short instruction block to `.claude/CLAUDE.md` and `AGENTS.md` telling the agent
 **merges** into any config you already have — it never overwrites other MCP servers, and if it
 cannot understand a config file it stops rather than damaging it.
 
-Now save your first decision:
+Now save your first decision. Just run the command with no flags — it asks you the questions:
+
+```bash
+whyanchor capture
+```
+
+```
+√ One-line title for this memory:
+  Enterprise discount is 30% by contract, not a guess
+
+√ What should future you (or another dev) know? (a few sentences)
+  Legal signed off on 30% in the 2026 MSA template. Do not change this for conversion
+  experiments without contract review.
+
+√ Files/symbols this is anchored to (comma-separated, e.g. src/billing.ts#calculateTax)
+  src/pricing.ts#calculateDiscount
+
+√ Tags (comma-separated, optional)
+  pricing, legal
+
+✔ Captured "Enterprise discount is 30% by contract, not a guess"
+  → .memory/entries/2026-09-21-enterprise-discount-is-30-by-contract-not-a-guess-mem_a8AwCAoR.md
+```
+
+The third question — **anchoring** the note to `src/pricing.ts#calculateDiscount` — is the part
+that matters most. That anchor is what makes staleness detection possible later.
+
+Writing a script, a git hook, or capturing from CI instead of a terminal? Skip the prompts by
+passing the same answers as flags:
 
 ```bash
 whyanchor capture \
@@ -158,10 +193,8 @@ whyanchor capture \
   --tags pricing,legal
 ```
 
-Or just run `whyanchor capture` with no flags and it asks you the questions.
-
-The `-r` flag is the key part. It **anchors** the note to a specific function. That anchor is what
-makes staleness detection possible later.
+Any flag you provide is skipped in the prompt; leave one out and `capture` still asks for just
+that one.
 
 Finally, push it into the files your agents read at startup:
 
@@ -229,38 +262,135 @@ Your edits to the frontmatter are preserved. `whyanchor generate` only rewrites 
 
 ## The day-to-day workflow
 
+`init` and `connect` are one-time setup. Everything below is what actually recurs, week to week.
+
+| When | What you run | Why |
+| --- | --- | --- |
+| You just made a decision someone could undo by accident | `whyanchor capture` | ~20 seconds, interactive by default |
+| Mid-conversation with an agent | Nothing — the agent calls `capture_memory` itself | That's the point of wiring up MCP |
+| After a batch of captures, or before opening the project in your agent | `whyanchor generate` | Rolls new notes into `CLAUDE.md` / `AGENTS.md` / Cursor's rules file |
+| Right before you commit | `whyanchor check` (or the git hook below) | Catches notes that silently went stale because of this change |
+| A note comes back `[STALE]` | `whyanchor capture --supersedes <id>` | Writes a corrected note; the old one stays in git history, marked superseded — never edited in place |
+
+The five diagrams below cover, respectively: the loop above end to end, then each of its steps in
+more detail — how a note gets written, how it gets back out to an agent (two different ways), and
+how an agent finds it during a conversation.
+
+### Developer workflow flow
+
+```mermaid
+flowchart LR
+    Start(["whyanchor init + connect<br/>— once per project"]) --> Work["build the feature,<br/>same as always"]
+    Work --> Decide{"made a call someone<br/>could undo by accident?"}
+    Decide -- "no" --> Work
+    Decide -- "yes" --> Capture["whyanchor capture<br/>(or the agent calls capture_memory)"]
+    Capture --> Generate["whyanchor generate"]
+    Generate --> Work
+    Work --> Commit{"about to commit?"}
+    Commit -- "not yet" --> Work
+    Commit -- "yes" --> Check["whyanchor check"]
+    Check -- "all clean" --> Done(["commit"])
+    Check -- "[STALE] flagged" --> Supersede["whyanchor capture --supersedes id"]
+    Supersede --> Generate
+```
+
+### Memory capture flow
+
+What actually happens inside `whyanchor capture`, whether you answer the prompts or pass flags:
+
+```mermaid
+sequenceDiagram
+    participant You as You / Agent
+    participant CLI as whyanchor capture
+    participant Git as git
+    participant Store as .memory/entries/
+
+    You->>CLI: title + message<br/>(typed at the prompts, or -t/-m flags)
+    CLI->>Git: read author (git config user.email)<br/>and the current commit
+    CLI->>CLI: fingerprint each anchored ref —<br/>hash the function or file (core/fingerprint.ts)
+    CLI->>Store: write mem_xxxxxxxx.md<br/>(frontmatter + your note, plain markdown)
+    opt --supersedes was passed
+        CLI->>Store: mark the prior note's status: superseded
+    end
+    Store-->>You: "✔ Captured ... → .memory/entries/....md"
+```
+
+Nothing here touches git itself — the file is written and left staged-or-not, exactly like any
+other change you made by hand. You review and commit it the same way.
+
+### Context injection flow
+
+What `whyanchor generate` does to get a note in front of an agent that has no MCP support (or
+before it has even started a session):
+
+```mermaid
+flowchart TD
+    Entries[".memory/entries/*.md<br/>every active note"] --> Group["group by tag"]
+    Group --> Render["render to markdown<br/>(agentsFile.ts#renderMemorySection)"]
+    Render --> Claude["upsert between<br/>&lt;!-- whyanchor:start/end --&gt;<br/>in .claude/CLAUDE.md"]
+    Render --> Agents["same markers,<br/>in AGENTS.md"]
+    Render --> Cursor["same notes, Cursor's own format,<br/>in .cursor/rules/whyanchor.mdc"]
+    Claude --> P1(["everything outside<br/>the markers is untouched"])
+    Agents --> P2(["same guarantee"])
+    Cursor --> P3(["your globs / alwaysApply<br/>edits above the marker survive too"])
+```
+
+The replacement is marker-scoped and line-exact, not a full-file rewrite — so a hand-written note
+above the block, or a note whose own body happens to contain marker-like text, cannot corrupt the
+file.
+
+### MCP integration flow
+
+What `whyanchor connect` sets up, and what happens live once the agent is running:
+
 ```mermaid
 sequenceDiagram
     participant You
-    participant Tool as whyanchor
-    participant Repo as your repo
+    participant Connect as whyanchor connect
+    participant Cfg as .mcp.json / .cursor/mcp.json /<br/>.codex/config.toml
+    participant Agent as Claude Code / Cursor / Codex
+    participant Server as whyanchor mcp<br/>(spawned by the agent)
 
-    You->>Tool: whyanchor capture (after a real decision)
-    Tool->>Repo: writes .memory/entries/2026-09-21-....md
-    Note over Repo: it is a normal file —<br/>review it in git diff, commit it like code
+    You->>Connect: whyanchor connect
+    Connect->>Cfg: register the spawn command<br/>for the whyanchor server
+    Connect->>Agent: write the "when to use this"<br/>instructions into CLAUDE.md / AGENTS.md
 
-    You->>Tool: whyanchor generate
-    Tool->>Repo: updates .claude/CLAUDE.md, AGENTS.md,<br/>and the Cursor rules file
+    Note over You,Agent: you reopen the project
 
-    Note over You,Repo: ...weeks pass, code changes...
+    Agent->>Server: spawns whyanchor mcp over stdio
+    Server-->>Agent: lists its 5 tools
 
-    You->>Tool: whyanchor check
-    Tool->>Repo: re-reads the anchored code + git history
-    Tool-->>You: "[STALE] discount note — content changed since capture"
-
-    You->>Tool: whyanchor capture --supersedes mem_a8AwCAoR
-    Note over Repo: old note marked superseded,<br/>new one takes over
+    loop during the conversation
+        Agent->>Server: e.g. get_memory_for_file("src/pricing.ts")
+        Server-->>Agent: matching notes, or none
+    end
 ```
 
-In plain words:
+If you installed with `npm install -g`, the command `connect` registers is stable. If you're
+running the tool via bare `npx whyanchor`, pass `--command "npx -y whyanchor mcp"` explicitly when
+connecting — `npx`'s own cache is pruned periodically, and a config pointed at that cache's
+temporary path can stop resolving later.
 
-1. **After finishing a task**, if you made a decision someone could undo by accident, run
-   `whyanchor capture`. Takes about 20 seconds.
-2. **Run `whyanchor generate`** so the note reaches agents at startup.
-3. **Run `whyanchor check` before committing** (or wire it into a git hook, below) so you find out
-   when a note has gone stale.
-4. **When a note is wrong**, do not edit it in place — capture a new one with `--supersedes`. The
-   old one stays in git history, so you can see how your thinking changed.
+### Memory retrieval flow
+
+Five different ways a note comes back out of `.memory/entries/`, depending on who's asking:
+
+```mermaid
+flowchart TD
+    Store[(".memory/entries/*.md")]
+
+    Store --> List["whyanchor list<br/>— every note, optionally --tag filtered"]
+    Store --> Check["whyanchor check<br/>— every note, plus a staleness verdict"]
+    Store --> GMFF["agent: get_memory_for_file<br/>— notes anchored to one file"]
+    Store --> Search["agent: search_memory<br/>— keyword/tag search over titles + bodies"]
+    Store --> GME["agent: get_memory_entry<br/>— one full note, by id"]
+
+    List --> You(["you, in the terminal"])
+    Check --> You
+    GMFF --> AgentOut(["the agent, mid-conversation"])
+    Search --> AgentOut
+    GME --> AgentOut
+```
 
 ### Run the check automatically
 
@@ -570,7 +700,7 @@ npm test            # run the test suite
 npm run dev -- list # run a command straight from source, no build
 ```
 
-**34 tests across 5 files.** The staleness tests are not mocked — they create real temporary git
+**40 tests across 5 files.** The staleness tests are not mocked — they create real temporary git
 repos, make real commits, and assert that each of the four levels comes out right. That is how the
 two nastiest bugs in this codebase were caught before release:
 
