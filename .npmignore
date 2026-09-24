@@ -1,8 +1,6 @@
 node_modules/
-dist/
 *.log
 error-log.json
 .claude/worktrees/
 .claude/.mcp.json
-graph-app/.next/
-graph-app/next-env.d.ts
+graph-app/.next/cache/

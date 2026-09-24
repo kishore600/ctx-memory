@@ -6,6 +6,7 @@ import { runConnect } from "./commands/connect.js";
 import { runGenerate } from "./commands/generate.js";
 import { runInit } from "./commands/init.js";
 import { runList } from "./commands/list.js";
+import { runViewgraph } from "./commands/viewgraph.js";
 import { startMcpServer } from "./mcp/server.js";
 import { getVersion } from "./core/version.js";
 
@@ -78,6 +79,20 @@ program
   .option("--json", "Output machine-readable JSON")
   .action(async (options) => {
     await runList(process.cwd(), options);
+  });
+
+program
+  .command("viewgraph")
+  .description("Start the interactive knowledge graph app and open it in your browser")
+  .option("--tag <tag>", "Pre-filter the graph to entries with this tag")
+  .option("--port <port>", "Port to run the graph server on (default: 4317, or a free port)", (v) => parseInt(v, 10))
+  .option("--no-open", "Start the server but don't open a browser")
+  .action(async (options) => {
+    await runViewgraph(process.cwd(), {
+      tag: options.tag,
+      port: options.port,
+      open: options.open,
+    });
   });
 
 program

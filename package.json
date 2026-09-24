@@ -1,6 +1,6 @@
 {
   "name": "whyanchor",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Local-first, git-backed memory layer for AI coding agents. Capture decisions, detect staleness, generate CLAUDE.md/AGENTS.md, and serve memory over MCP.",
   "type": "module",
   "license": "MIT",
@@ -31,7 +31,9 @@
     "whyanchor": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "graph-app/next.config.mjs",
+    "graph-app/.next"
   ],
   "engines": {
     "node": ">=18"
@@ -40,7 +42,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && next build graph-app",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -51,12 +53,21 @@
     "commander": "^12.1.0",
     "gray-matter": "^4.0.3",
     "nanoid": "^5.0.9",
+    "next": "^16.3.6",
     "prompts": "^2.4.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-force-graph-2d": "^1.29.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.10.5",
     "@types/prompts": "^2.4.9",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^5.0.1"

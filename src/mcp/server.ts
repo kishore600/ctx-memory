@@ -2,11 +2,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { computeFingerprints } from "../core/fingerprint.js";
+import { findRelatedEntries } from "../core/graph.js";
 import { getCurrentCommit, getGitAuthor, getRepoRoot } from "../core/git.js";
+import { rankEntries } from "../core/search.js";
 import { checkEntries } from "../core/staleness.js";
 import { listEntries, writeEntry } from "../core/store.js";
 import type { MemoryEntry } from "../core/schema.js";
 import { getVersion } from "../core/version.js";
+
+const DEFAULT_SEARCH_LIMIT = 20;
 
 function summarize(entry: MemoryEntry): Record<string, unknown> {
   const { id, title, date, author, tags, refs, status } = entry.frontmatter;
@@ -25,23 +29,49 @@ export async function startMcpServer(cwd: string): Promise<void> {
 
   server.tool(
     "search_memory",
-    "Search captured project memory (decisions, context, gotchas) by keyword and/or tag. " +
-      "Use this before making an architectural decision or touching an unfamiliar area of the repo.",
+    "Search captured project memory (decisions, context, gotchas) by keyword and/or tag, ranked by " +
+      "relevance (local lexical scoring over title, tags, refs and body — no embeddings, no network " +
+      "calls). Use this before making an architectural decision or touching an unfamiliar area of the repo.",
     {
-      query: z.string().optional().describe("Free-text search over titles and body"),
+      query: z.string().optional().describe("Free-text search over titles, tags, refs and body"),
       tag: z.string().optional().describe("Filter to entries with this tag"),
+      limit: z.number().int().positive().optional().describe(`Max results to return (default ${DEFAULT_SEARCH_LIMIT})`),
     },
-    async ({ query, tag }) => {
+    async ({ query, tag, limit }) => {
       let entries = await listEntries(repoRoot);
       entries = entries.filter((e) => e.frontmatter.status !== "superseded");
       if (tag) entries = entries.filter((e) => e.frontmatter.tags.includes(tag));
+
+      let results: MemoryEntry[];
       if (query) {
-        const q = query.toLowerCase();
-        entries = entries.filter(
-          (e) => e.frontmatter.title.toLowerCase().includes(q) || e.body.toLowerCase().includes(q)
-        );
+        results = rankEntries(entries, query)
+          .filter((r) => r.score > 0)
+          .map((r) => r.entry);
+      } else {
+        results = entries;
       }
-      return textResult(entries.map(summarize));
+
+      return textResult(results.slice(0, limit ?? DEFAULT_SEARCH_LIMIT).map(summarize));
+    }
+  );
+
+  server.tool(
+    "get_related_memory",
+    "Find memory entries related to one you already have, via shared file/symbol references, shared " +
+      "tags, or a supersedes relationship — the same connections `whyanchor viewgraph` draws as edges. " +
+      "Use this to discover connected decisions without re-searching or scanning the whole store.",
+    {
+      id: z.string().describe("The memory entry id to find related entries for, e.g. mem_a8AwCAoR"),
+      limit: z.number().int().positive().optional().describe("Max related entries to return (default 10)"),
+    },
+    async ({ id, limit }) => {
+      const entries = await listEntries(repoRoot);
+      const active = entries.filter((e) => e.frontmatter.status !== "superseded");
+      if (!active.some((e) => e.frontmatter.id === id)) {
+        return textResult({ error: `No active entry with id ${id}` });
+      }
+      const related = findRelatedEntries(active, id, limit ?? 10);
+      return textResult(related.map((r) => ({ ...summarize(r.entry), relatedness: r.score, reasons: r.reasons })));
     }
   );
 

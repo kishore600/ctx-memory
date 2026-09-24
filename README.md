@@ -6,7 +6,10 @@ A small command-line tool that stores project decisions as markdown files in you
 them to AI agents (Claude Code, Cursor, Codex) at the right moment, and warns you when a note no
 longer matches the code it describes.
 
-No server. No account. No network calls. Everything lives in your repo.
+No account. No network calls. Everything lives in your repo. The one exception is `whyanchor
+viewgraph`, which starts a local web server on your machine to power its UI — nothing leaves your
+machine, but it is a real server, not just files. Every other command stays exactly as local as
+that sounds.
 
 ---
 
@@ -19,6 +22,7 @@ No server. No account. No network calls. Everything lives in your repo.
 - [Use it in 5 minutes](#use-it-in-5-minutes)
 - [The day-to-day workflow](#the-day-to-day-workflow)
 - [All commands](#all-commands)
+- [The knowledge graph](#the-knowledge-graph)
 - [How AI agents use it](#how-ai-agents-use-it)
 - [Staleness detection: the main idea](#staleness-detection-the-main-idea)
 - [Compared with existing tools](#compared-with-existing-tools)
@@ -329,6 +333,7 @@ whyanchor check --fail-on-stale || {
 | `whyanchor generate` | Writes your notes into `.claude/CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/whyanchor.mdc`. |
 | `whyanchor check` | Compares every note against the current code. Reports what has gone stale. |
 | `whyanchor list` | Shows all saved notes. |
+| `whyanchor viewgraph` | Starts a local web app rendering your notes, files and tags as an interactive graph, and opens it in your browser. |
 | `whyanchor mcp` | Runs the MCP server. **Agents run this, not you.** |
 
 Useful flags:
@@ -340,9 +345,50 @@ whyanchor check --json                        # machine-readable output
 whyanchor check --write                       # save the check result into the note files
 whyanchor generate --target cursor            # only one target: claude | agents | cursor | all
 whyanchor list --tag pricing                  # filter by tag
+whyanchor viewgraph --tag pricing             # pre-filter the graph to one tag
+whyanchor viewgraph --port 5000               # run the graph server on a specific port
+whyanchor viewgraph --no-open                 # start the server without launching a browser
 whyanchor connect --agent claude,cursor       # only wire up some agents
 whyanchor connect --command "whyanchor mcp"   # override how the server is launched
 ```
+
+---
+
+## The knowledge graph
+
+```bash
+whyanchor viewgraph
+```
+
+Every note is already connected to other things: the files and symbols it's anchored to, the
+tags it shares with other notes, and — when one note supersedes another — the note it replaced.
+`viewgraph` draws that as an actual graph instead of leaving you to trace it through `list` output
+by hand.
+
+It's a small Next.js app, bundled inside whyanchor itself: `viewgraph` starts it on `localhost`
+(picking a free port automatically) and opens your browser to it. Nothing about this reaches the
+network beyond your own machine — the page fetches its data from a local API route that reads
+straight from `.memory/entries/` — but it genuinely is a running server, not a file you're opening
+directly, and it keeps running in your terminal until you press Ctrl+C. The page has:
+
+- **Memory, file, and tag nodes**, force-directed and colored by type, with a memory node's color
+  showing its `stale`/`superseded` status
+- **Pan, zoom, and drag** a node to reposition it
+- **A search box** that dims everything except nodes matching what you type
+- **Filters** by node type and by status (superseded notes are hidden by default, to keep the
+  graph focused on what's still current)
+- **A detail panel** — click any node to see its full body, refs, and tags, and jump to
+  whatever it's connected to
+- **Auto-refresh** — it polls for new captures every few seconds, so a decision an agent just
+  saved shows up without you restarting anything
+
+```bash
+whyanchor viewgraph --tag billing   # pre-filter to one tag
+whyanchor viewgraph --port 5000 --no-open   # run on a specific port, don't launch a browser
+```
+
+Every fetch reads `.memory/entries/` fresh — there's no separate index or cache to keep in sync,
+so the graph is always as current as your last capture.
 
 ---
 
@@ -358,15 +404,21 @@ whyanchor connect --command "whyanchor mcp"   # override how the server is launc
 | Cursor | `.cursor/mcp.json` | Same JSON shape |
 | Codex CLI | `.codex/config.toml` | TOML — a different format. Also needs `codex trust` on the repo once. |
 
-**The five tools your agent gets:**
+**The six tools your agent gets:**
 
 | Tool | When the agent uses it |
 | --- | --- |
 | `get_memory_for_file` | Before editing a file — "what do I need to know about this one?" |
-| `search_memory` | Before a big decision — "has this already been decided?" |
+| `search_memory` | Before a big decision — "has this already been decided?" Ranked locally by relevance (title/tags/refs/body), no embeddings or network calls involved. |
+| `get_related_memory` | To pull in other notes connected to one it already has, via shared files, shared tags, or a supersedes chain — the same relationships `whyanchor viewgraph` draws as edges |
 | `get_memory_entry` | To read one note in full |
 | `list_stale_memory` | To check whether a note can still be trusted |
 | `capture_memory` | To save a new decision during your conversation |
+
+Both `search_memory` and `get_related_memory` return compact summaries (title, tags, refs, a
+one-line preview), not full bodies — keeping an agent's context usage low even as the store grows.
+Every call reads straight from `.memory/entries/` with no cache in between, so a capture made
+one second ago is visible to the very next tool call, from any connected agent.
 
 ### The part people get wrong
 
@@ -449,7 +501,7 @@ alongside this, not instead of it.
 
 ## What makes this one different
 
-Five concrete design choices:
+Six concrete design choices:
 
 1. **Anchored to symbols, not files.** A note points at `pricing.ts#calculateDiscount`, not just
    `pricing.ts`. Unrelated edits in the same file do not trigger false alarms.
@@ -461,6 +513,9 @@ Five concrete design choices:
    merges all work normally. If you delete this tool tomorrow, your notes are still readable.
 5. **One command to set up across three agents.** `whyanchor connect` handles the config *and* the
    instructions that make an agent actually use it.
+6. **A visual map of how your decisions connect.** `whyanchor viewgraph` turns the refs, tags, and
+   supersedes chains you already write into an explorable graph — see [The knowledge
+   graph](#the-knowledge-graph).
 
 ### An honest note
 
@@ -471,9 +526,9 @@ agents. A plain hand-written `CLAUDE.md` gets you most of the way for zero effor
 those fits your situation, use them — the goal is that your decisions survive, not that you use
 this particular tool.
 
-What this one offers is symbol-level anchoring, the four-level check, dual delivery, and one
-command to wire it all up. Whether that is worth switching for depends entirely on the next
-section.
+What this one offers is symbol-level anchoring, the four-level check, dual delivery, one command
+to wire it all up, and a graph view to see it all connected. Whether that is worth switching for
+depends entirely on the next section.
 
 ---
 
@@ -568,19 +623,30 @@ whyanchor/
 │   │   ├── capture.ts
 │   │   ├── check.ts              # staleness report
 │   │   ├── generate.ts
-│   │   └── list.ts
+│   │   ├── list.ts
+│   │   └── viewgraph.ts          # renders and opens the knowledge graph
 │   ├── core/
 │   │   ├── schema.ts             # what a valid note looks like
 │   │   ├── store.ts              # reading and writing note files
 │   │   ├── git.ts                # author, commit, "what changed since"
 │   │   ├── fingerprint.ts        # finding a function and hashing it
-│   │   └── staleness.ts          # the four-level decision
+│   │   ├── staleness.ts          # the four-level decision
+│   │   ├── graph.ts              # the memory/file/tag relationship graph
+│   │   ├── search.ts             # local lexical ranking, no embeddings
+│   │   └── open.ts               # cross-platform "open this in a browser"
 │   ├── generators/
 │   │   ├── agentsFile.ts         # writing into the agent context files
 │   │   └── agentConfig.ts        # writing agent MCP configs
 │   └── mcp/
-│       └── server.ts             # the five tools agents call
-├── tests/                        # 34 tests, including real git repos
+│       └── server.ts             # the six tools agents call
+├── graph-app/                     # the viewgraph UI — a separate Next.js app, prebuilt and
+│   │                              # shipped inside the published package (see below)
+│   ├── app/
+│   │   ├── page.tsx               # the graph page
+│   │   └── api/graph/route.ts     # reads .memory/entries/ via ../dist/core/*, returns JSON
+│   ├── components/                # GraphView (the force graph), Sidebar, DetailPanel
+│   └── lib/                       # client-side types + node/edge colors
+├── tests/                        # 54 tests, including real git repos
 ├── .memory/entries/              # this project's own notes about itself
 ├── .claude/CLAUDE.md             # generated — agent instructions + notes
 ├── AGENTS.md                     # generated — same, for Codex/Cursor/Copilot/…
@@ -593,18 +659,25 @@ whyanchor/
 The generated files are checked in on purpose. Anyone who clones this repo gets the memory
 tooling working immediately, with no setup.
 
+`graph-app/` is the opposite: its `.next/` build output is gitignored (like `dist/`) but still
+needs to ship in the npm package, since `viewgraph` runs the prebuilt app, not `next dev`. `npm run
+build` runs `tsc` and then `next build graph-app` in that order — the app's API route imports the
+already-compiled `../dist/core/*.js`, not `../src`, so `dist/` has to exist first. An `.npmignore`
+(which replaces `.gitignore` for packing purposes) makes sure the gitignored `.next` output still
+gets published.
+
 ---
 
 ## Development
 
 ```bash
-npm run build       # compile TypeScript into dist/
+npm run build       # compile TypeScript into dist/, then build the graph-app Next.js UI
 npm run typecheck   # type check without emitting
 npm test            # run the test suite
 npm run dev -- list # run a command straight from source, no build
 ```
 
-**40 tests across 5 files.** The staleness tests are not mocked — they create real temporary git
+**54 tests across 9 files.** The staleness tests are not mocked — they create real temporary git
 repos, make real commits, and assert that each of the four levels comes out right. That is how the
 two nastiest bugs in this codebase were caught before release:
 
