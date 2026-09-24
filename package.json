@@ -42,7 +42,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && next build graph-app",
+    "build": "tsc -p tsconfig.json && next build graph-app && node scripts/postbuild.mjs",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
